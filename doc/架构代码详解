@@ -1,0 +1,16 @@
+
+
+src/
+├── mon/          # Monitor 守护进程
+├── osd/          # OSD 守护进程
+├── mds/          # MDS 守护进程
+├── rgw/          # RADOS Gateway
+├── common/       # 通用库
+├── messages/     # 集群内部消息
+├── crush/        # CRUSH 算法
+├── os/           # 存储后端 (BlueStore, FileStore)
+├── librados/     # RADOS 客户端库
+├── librbd/       # RBD 客户端库
+├── client/       # CephFS 客户端
+└── auth/         # 认证系统 (cephx)
+

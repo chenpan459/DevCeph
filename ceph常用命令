@@ -1,0 +1,25 @@
+ 
+ ceph orch ps
+ ceph orch ls
+
+
+ docker ps
+ docker ps a
+ docker ps -a
+ ceph orch rm node-exporter.ceph-master-33
+ ceph orch rm node-exporter.ceph-node-34
+ ceph orch rm node-exporter.ceph-node-35
+ ceph orch rm node-export
+ ceph orch rm node-exportrt
+ ceph orch rm node-exporter
+ ceph orch ls
+ ceph orch ps
+ ceph orch ls
+ ceph health detail
+ ceph status
+ which ceph
+ dpkg --help
+ dpkg -L ceph
+ dpkg -S /usr/bin/ceph
+
+

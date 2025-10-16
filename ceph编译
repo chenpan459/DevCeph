@@ -1,0 +1,47 @@
+
+
+
+# 确保你在源码根目录
+cd /home/work/ceph
+
+# 获取远程最新分支信息
+git fetch origin
+
+# 基于远程分支创建本地分支并切换
+git checkout -b 18.2.1-327.el9c origin/18.2.1-327.el9c
+git checkout main
+
+git branch
+
+
+git checkout -b main origin/main
+
+
+
+
+mkdir build
+cd build
+cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+      -DWITH_SYSTEM_ROCKSDB=ON \
+      -DWITH_SYSTEM_BOOST=ON \
+      -DWITH_TESTS=OFF \
+      -DWITH_SEASTORE=ON \
+      -DWITH_SPDK=OFF \
+      -GNinja ..
+ ninja -j$(nproc)
+     
+| 参数                    | 含义                                 |
+| --------------------- | ---------------------------------- |
+| `CMAKE_BUILD_TYPE`    | 编译模式（Debug/Release/RelWithDebInfo） |
+| `WITH_SYSTEM_BOOST`   | 使用系统的 boost 库                      |
+| `WITH_SYSTEM_ROCKSDB` | 使用系统 rocksdb                       |
+| `WITH_TESTS=OFF`      | 不编译测试代码，加快速度                       |
+| `WITH_SEASTORE=ON`    | 启用新一代存储引擎 SeaStore（可选）             |
+| `WITH_SPDK=ON`        | 启用 SPDK（需提前安装）                     |
+
+
+tar --exclude='build' -zcvf ../xxx.tar.gz ./*
+
+cd /home/work/ceph/build
+cmake -DBOOST_ROOT=/usr/local -DBOOST_INCLUDEDIR=/usr/local/include -DBOOST_LIBRARYDIR=/usr/local/lib ..
+ninja -j$(nproc)
