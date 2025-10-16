@@ -1,23 +1,43 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph - 可扩展的分布式文件系统
  *
- * Copyright (C) 2011 New Dream Network
+ * 版权所有 (C) 2011 New Dream Network
  *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.	See file COPYING.
+ * 这是一个自由软件；您可以在自由软件基金会发布的GNU Lesser General Public
+ * License version 2.1条款下重新分发和/或修改它。请参阅COPYING文件。
  *
+ */
+
+/**
+ * @file librbd.cc
+ * @brief RBD (RADOS Block Device) 库的主要实现文件
+ *
+ * 本文件实现了 RBD 库的 C API 接口，提供对 Ceph 集群中块设备镜像的各种操作。
+ * RBD 允许用户创建、删除、调整大小、快照和克隆块设备镜像，支持同步和异步 I/O 操作。
+ *
+ * 主要功能包括：
+ * - 镜像管理：创建、删除、重命名、调整大小
+ * - 镜像元数据：获取镜像信息、特性、统计信息
+ * - I/O 操作：读、写、丢弃、刷新、刷新和失效
+ * - 快照管理：创建、删除、回滚、保护快照
+ * - 镜像克隆和复制操作
+ * - 镜像迁移功能
+ * - 镜像镜像（镜像）功能
+ * - 分组和命名空间支持
+ * - 垃圾回收箱管理
+ *
+ * 本文件定义了所有公开的 C API 函数，并包含必要的辅助函数和数据转换函数。
+ * 这些函数提供了与 Ceph 存储集群交互的完整接口。
  */
 #include "include/int_types.h"
 
 #include <errno.h>
 
-// these strand headers declare static variables that need to be shared between
-// librbd.so and librados.so. referencing them here causes librbd.so to link
-// their symbols as 'global unique'. see https://tracker.ceph.com/issues/63682
+// 这些 strand 头文件声明了需要在 librbd.so 和 librados.so 之间共享的静态变量。
+// 在这里引用它们使 librbd.so 将它们的符号链接为 'global unique'。
+// 详见 https://tracker.ceph.com/issues/63682
 #include <boost/asio/strand.hpp>
 #include <boost/asio/io_context_strand.hpp>
 
@@ -53,6 +73,7 @@
 #include <string>
 #include <vector>
 
+// LTTng 追踪支持
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -60,11 +81,14 @@
 #undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #undef TRACEPOINT_DEFINE
 #else
+/** @brief 当未启用 LTTng 追踪时使用的空追踪点宏 */
 #define tracepoint(...)
 #endif
 
+/** @brief RBD 操作的调试输出子系统 */
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
+/** @brief RBD 库消息的调试输出前缀 */
 #define dout_prefix *_dout << "librbd: "
 
 using std::list;
@@ -80,8 +104,15 @@ using librados::IoCtx;
 
 namespace {
 
+/// @brief RBD 追踪支持的追踪点提供者特性
 TracepointProvider::Traits tracepoint_traits("librbd_tp.so", "rbd_tracing");
 
+/**
+ * @brief 用户缓冲区的自定义删除器，用于 AIO 操作
+ *
+ * 此删除器确保用户缓冲区生命周期与 AIO 完成处理之间的正确同步。
+ * 它会阻塞 AIO 完成，直到缓冲区不再需要，防止缓冲区过早释放。
+ */
 struct UserBufferDeleter : public deleter::impl {
   CephContext* cct;
   librbd::io::AioCompletion* aio_completion;
@@ -96,23 +127,43 @@ struct UserBufferDeleter : public deleter::impl {
   }
 };
 
+/**
+ * @brief 创建写操作缓冲区，处理零拷贝优化
+ *
+ * 此函数为写操作创建缓冲区，尽可能使用零拷贝以获得更好的性能。
+ * 当禁用零拷贝或用于非 AIO 操作时，回退到复制缓冲区。
+ *
+ * @param ictx 镜像上下文
+ * @param buf 包含要写入数据的缓冲区
+ * @param len 缓冲区长度
+ * @param aio_completion 用于同步的 AIO 完成对象
+ * @return 准备好进行写操作的缓冲区对象
+ */
 static auto create_write_raw(librbd::ImageCtx *ictx, const char *buf,
                              size_t len,
                              librbd::io::AioCompletion* aio_completion) {
   if (ictx->disable_zero_copy || aio_completion == nullptr) {
-    // must copy the buffer if writeback/writearound cache is in-use (or using
-    // non-AIO)
+    // 如果使用了写回/写穿缓存或使用非 AIO，必须复制缓冲区
     return buffer::copy(buf, len);
   }
 
-  // avoid copying memory for AIO operations, but possibly delay completions
-  // until the last reference to the user's memory has been released
+  // 避免复制 AIO 操作的内存，但可能延迟完成直到用户内存的最后一个引用被释放
   return ceph::unique_leakable_ptr<ceph::buffer::raw>(
     buffer::claim_buffer(
       len, const_cast<char*>(buf),
       deleter(new UserBufferDeleter(ictx->cct, aio_completion))));
 }
 
+/**
+ * @brief 计算 iovec 数组的总长度
+ *
+ * 此函数计算 iovec 结构数组中所有元素的长度总和，并检查潜在的溢出情况。
+ *
+ * @param iov iovec 结构数组
+ * @param iovcnt iovec 数组中的元素数量
+ * @param len [输出] 所有 iovec 元素的总长度
+ * @return 成功返回 0，错误返回 -EINVAL（无效输入或溢出）
+ */
 static int get_iovec_length(const struct iovec *iov, int iovcnt, size_t &len)
 {
   len = 0;
@@ -123,7 +174,7 @@ static int get_iovec_length(const struct iovec *iov, int iovcnt, size_t &len)
 
   for (int i = 0; i < iovcnt; ++i) {
     const struct iovec &io = iov[i];
-    // check for overflow
+    // 检查溢出
     if (len + io.iov_len < len) {
       return -EINVAL;
     }
@@ -133,6 +184,17 @@ static int get_iovec_length(const struct iovec *iov, int iovcnt, size_t &len)
   return 0;
 }
 
+/**
+ * @brief 将 iovec 数组转换为 Ceph 缓冲区列表
+ *
+ * 此函数将 iovec 结构数组转换为单个 Ceph 缓冲区列表，尽可能使用零拷贝优化。
+ *
+ * @param ictx 用于缓冲区管理的镜像上下文
+ * @param iov 包含数据的 iovec 结构数组
+ * @param iovcnt iovec 数组中的元素数量
+ * @param aio_completion 用于同步的 AIO 完成对象
+ * @return 包含所有 iovec 数据的缓冲区列表
+ */
 static bufferlist iovec_to_bufferlist(librbd::ImageCtx *ictx,
                                       const struct iovec *iov,
                                       int iovcnt,
@@ -147,10 +209,22 @@ static bufferlist iovec_to_bufferlist(librbd::ImageCtx *ictx,
   return bl;
 }
 
+/**
+ * @brief 从 RADOS IoCtx 获取 CephContext
+ *
+ * @param io_ctx RADOS I/O 上下文
+ * @return CephContext 指针
+ */
 CephContext* get_cct(IoCtx &io_ctx) {
   return reinterpret_cast<CephContext*>(io_ctx.cct());
 }
 
+/**
+ * @brief 从 RBD AIO 完成对象获取内部 AIO 完成对象
+ *
+ * @param comp RBD AIO 完成对象
+ * @return 内部 AIO 完成对象指针
+ */
 librbd::io::AioCompletion* get_aio_completion(librbd::RBD::AioCompletion *comp) {
   return reinterpret_cast<librbd::io::AioCompletion *>(comp->pc);
 }
@@ -3214,6 +3288,13 @@ namespace librbd {
 
 } // namespace librbd
 
+/**
+ * @brief 获取 RBD 库版本信息
+ *
+ * @param major 主版本号指针（可为 NULL）
+ * @param minor 次版本号指针（可为 NULL）
+ * @param extra 额外版本号指针（可为 NULL）
+ */
 extern "C" void rbd_version(int *major, int *minor, int *extra)
 {
   if (major)
@@ -3224,28 +3305,63 @@ extern "C" void rbd_version(int *major, int *minor, int *extra)
     *extra = LIBRBD_VER_EXTRA;
 }
 
+/**
+ * @brief 创建镜像选项对象
+ *
+ * @param opts 镜像选项对象指针
+ */
 extern "C" void rbd_image_options_create(rbd_image_options_t* opts)
 {
   librbd::image_options_create(opts);
 }
 
+/**
+ * @brief 销毁镜像选项对象
+ *
+ * @param opts 镜像选项对象
+ */
 extern "C" void rbd_image_options_destroy(rbd_image_options_t opts)
 {
   librbd::image_options_destroy(opts);
 }
 
+/**
+ * @brief 设置镜像选项的字符串值
+ *
+ * @param opts 镜像选项对象
+ * @param optname 选项名称
+ * @param optval 选项字符串值
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_image_options_set_string(rbd_image_options_t opts, int optname,
 					    const char* optval)
 {
   return librbd::image_options_set(opts, optname, optval);
 }
 
+/**
+ * @brief 设置镜像选项的无符号 64 位整数值
+ *
+ * @param opts 镜像选项对象
+ * @param optname 选项名称
+ * @param optval 选项无符号 64 位整数值
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_image_options_set_uint64(rbd_image_options_t opts, int optname,
 					    uint64_t optval)
 {
   return librbd::image_options_set(opts, optname, optval);
 }
 
+/**
+ * @brief 获取镜像选项的字符串值
+ *
+ * @param opts 镜像选项对象
+ * @param optname 选项名称
+ * @param optval 存储选项值的缓冲区
+ * @param maxlen 缓冲区最大长度
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_image_options_get_string(rbd_image_options_t opts, int optname,
 					    char* optval, size_t maxlen)
 {
@@ -3266,34 +3382,76 @@ extern "C" int rbd_image_options_get_string(rbd_image_options_t opts, int optnam
   return 0;
 }
 
+/**
+ * @brief 获取镜像选项的无符号 64 位整数值
+ *
+ * @param opts 镜像选项对象
+ * @param optname 选项名称
+ * @param optval 存储选项值的指针
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_image_options_get_uint64(rbd_image_options_t opts, int optname,
 				 uint64_t* optval)
 {
   return librbd::image_options_get(opts, optname, optval);
 }
 
+/**
+ * @brief 检查镜像选项是否已设置
+ *
+ * @param opts 镜像选项对象
+ * @param optname 选项名称
+ * @param is_set [输出] 选项是否已设置
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_image_options_is_set(rbd_image_options_t opts, int optname,
                                         bool* is_set)
 {
   return librbd::image_options_is_set(opts, optname, is_set);
 }
 
+/**
+ * @brief 取消设置镜像选项
+ *
+ * @param opts 镜像选项对象
+ * @param optname 选项名称
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_image_options_unset(rbd_image_options_t opts, int optname)
 {
   return librbd::image_options_unset(opts, optname);
 }
 
+/**
+ * @brief 清空所有镜像选项
+ *
+ * @param opts 镜像选项对象
+ */
 extern "C" void rbd_image_options_clear(rbd_image_options_t opts)
 {
   librbd::image_options_clear(opts);
 }
 
+/**
+ * @brief 检查镜像选项是否为空
+ *
+ * @param opts 镜像选项对象
+ * @return 选项为空返回 1，否则返回 0
+ */
 extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 {
   return librbd::image_options_is_empty(opts);
 }
 
-/* pool mirroring */
+/* 池镜像相关函数 */
+/**
+ * @brief 获取镜像站点名称
+ *
+ * @param cluster RADOS 集群句柄
+ * @param name 存储站点名称的缓冲区
+ * @param max_len 缓冲区大小（输入时），实际需要的缓冲区大小（输出时）
+ * @return 成功返回 0，失败返回负的错误码
+ */
 extern "C" int rbd_mirror_site_name_get(rados_t cluster, char *name,
                                         size_t *max_len) {
   librados::Rados rados;

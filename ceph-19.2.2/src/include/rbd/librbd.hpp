@@ -1,15 +1,38 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
- * Ceph - scalable distributed file system
+ * Ceph - 可扩展的分布式文件系统
  *
- * Copyright (C) 2011 New Dream Network
+ * 版权所有 (C) 2011 New Dream Network
  *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.	See file COPYING.
+ * 这是一个自由软件；您可以在自由软件基金会发布的GNU Lesser General Public
+ * License version 2.1条款下重新分发和/或修改它。请参阅COPYING文件。
  *
+ */
+
+/**
+ * @file librbd.hpp
+ * @brief RBD (RADOS Block Device) 库的 C++ 接口头文件
+ *
+ * 本文件定义了 RBD 库的 C++ 接口，提供面向对象的访问方式，包括：
+ * - 类型别名：C++ 风格的数据类型定义
+ * - 类定义：RBD 主类、Image 类、ProgressContext 等
+ * - 结构定义：镜像规格、快照信息、镜像镜像状态等
+ *
+ * RBD C++ 接口在 C 接口基础上提供了更方便的面向对象封装，支持：
+ * - 异常处理和 RAII 资源管理
+ * - 标准库容器和字符串类型
+ * - 更好的类型安全性和代码可读性
+ * - 与 C++ 生态系统的更好集成
+ *
+ * 使用示例：
+ * @code
+ * #include <rbd/librbd.hpp>
+ * librbd::RBD rbd;
+ * librbd::Image image;
+ * librados::IoCtx io_ctx;
+ * rbd.open(io_ctx, image, "myimage");
+ * @endcode
  */
 
 #ifndef __LIBRBD_HPP
@@ -28,240 +51,359 @@
   #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
+/// @brief librbd 命名空间，包含 RBD 库的所有 C++ 接口
 namespace librbd {
 
+  /// @brief 使用 librados 的 IoCtx 类型
   using librados::IoCtx;
 
+  /// @brief 前向声明：RBD 镜像类
   class Image;
+  /// @brief 前向声明：镜像选项类
   class ImageOptions;
+  /// @brief 前向声明：池统计类
   class PoolStats;
+
+  /// @brief 镜像上下文类型（内部使用）
   typedef void *image_ctx_t;
+  /// @brief 完成回调类型（内部使用）
   typedef void *completion_t;
+  /// @brief 完成回调函数类型（内部使用）
   typedef void (*callback_t)(completion_t cb, void *arg);
 
+  /// @brief 镜像规格信息结构（C++ 版本）
+  /// @details 包含镜像的 ID 和名称，使用 C++ 字符串类型
   typedef struct {
-    std::string id;
-    std::string name;
+    std::string id;    ///< 镜像 ID
+    std::string name;  ///< 镜像名称
   } image_spec_t;
 
+  /// @brief 链接镜像规格信息结构（C++ 版本）
+  /// @details 包含完整池和镜像路径信息的镜像规格，使用 C++ 字符串类型
   typedef struct {
-    int64_t pool_id;
-    std::string pool_name;
-    std::string pool_namespace;
-    std::string image_id;
-    std::string image_name;
-    bool trash;
+    int64_t pool_id;              ///< 池 ID
+    std::string pool_name;        ///< 池名称
+    std::string pool_namespace;   ///< 池命名空间
+    std::string image_id;         ///< 镜像 ID
+    std::string image_name;       ///< 镜像名称
+    bool trash;                   ///< 是否在垃圾回收箱中
   } linked_image_spec_t;
 
+  /// @brief 快照命名空间类型（C++ 版本）
   typedef rbd_snap_namespace_type_t snap_namespace_type_t;
 
+  /// @brief 快照规格信息结构（C++ 版本）
+  /// @details 包含快照的 ID、命名空间类型和名称，使用 C++ 字符串类型
   typedef struct {
-    uint64_t id;
-    snap_namespace_type_t namespace_type;
-    std::string name;
+    uint64_t id;                           ///< 快照 ID
+    snap_namespace_type_t namespace_type;  ///< 快照命名空间类型
+    std::string name;                      ///< 快照名称
   } snap_spec_t;
 
+  /// @brief 快照信息结构（C++ 版本）
+  /// @details 包含快照的基本信息，使用 C++ 字符串类型
   typedef struct {
-    uint64_t id;
-    uint64_t size;
-    std::string name;
+    uint64_t id;           ///< 快照 ID
+    uint64_t size;         ///< 快照大小
+    std::string name;      ///< 快照名称
   } snap_info_t;
 
+  /// @brief 快照分组命名空间结构
+  /// @details 包含分组快照的池和名称信息
   typedef struct {
-    int64_t group_pool;
-    std::string group_name;
-    std::string group_snap_name;
+    int64_t group_pool;              ///< 分组池 ID
+    std::string group_name;          ///< 分组名称
+    std::string group_snap_name;     ///< 分组快照名称
   } snap_group_namespace_t;
 
+  /// @brief 快照垃圾回收箱命名空间结构
+  /// @details 包含原始快照的命名空间类型和名称信息
   typedef struct {
-    snap_namespace_type_t original_namespace_type;
-    std::string original_name;
+    snap_namespace_type_t original_namespace_type;  ///< 原始命名空间类型
+    std::string original_name;                      ///< 原始快照名称
   } snap_trash_namespace_t;
 
+  /// @brief 快照镜像状态类型（C++ 版本）
   typedef rbd_snap_mirror_state_t snap_mirror_state_t;
 
+  /// @brief 快照镜像命名空间结构
+  /// @details 包含快照镜像的完整状态信息
   typedef struct {
-    snap_mirror_state_t state;
-    std::set<std::string> mirror_peer_uuids;
-    bool complete;
-    std::string primary_mirror_uuid;
-    uint64_t primary_snap_id;
-    uint64_t last_copied_object_number;
+    snap_mirror_state_t state;                      ///< 镜像状态
+    std::set<std::string> mirror_peer_uuids;        ///< 镜像对等体 UUID 集合
+    bool complete;                                  ///< 是否镜像完成
+    std::string primary_mirror_uuid;                ///< 主镜像 UUID
+    uint64_t primary_snap_id;                       ///< 主快照 ID
+    uint64_t last_copied_object_number;             ///< 最后复制的对象编号
   } snap_mirror_namespace_t;
 
+  /// @brief 镜像锁持有者信息结构
+  /// @details 包含持有镜像锁的客户端信息
   typedef struct {
-    std::string client;
-    std::string cookie;
-    std::string address;
+    std::string client;    ///< 客户端标识符
+    std::string cookie;    ///< 锁 cookie
+    std::string address;   ///< 客户端地址
   } locker_t;
 
+  /// @brief 镜像对等体方向类型（C++ 版本）
   typedef rbd_mirror_peer_direction_t mirror_peer_direction_t;
 
+  /// @brief 镜像镜像对等体结构（C++ 版本，已废弃）
   typedef struct {
-    std::string uuid;
-    std::string cluster_name;
-    std::string client_name;
+    std::string uuid;          ///< 对等体 UUID
+    std::string cluster_name;  ///< 集群名称
+    std::string client_name;   ///< 客户端名称
   } mirror_peer_t CEPH_RBD_DEPRECATED;
 
+  /// @brief 镜像镜像对等体站点结构（C++ 版本）
   typedef struct {
-    std::string uuid;
-    mirror_peer_direction_t direction;
-    std::string site_name;
-    std::string mirror_uuid;
-    std::string client_name;
-    time_t last_seen;
+    std::string uuid;                          ///< 对等体站点 UUID
+    mirror_peer_direction_t direction;         ///< 镜像方向
+    std::string site_name;                     ///< 站点名称
+    std::string mirror_uuid;                   ///< 镜像 UUID
+    std::string client_name;                   ///< 客户端名称
+    time_t last_seen;                          ///< 最后见到时间
   } mirror_peer_site_t;
 
+  /// @brief 镜像镜像模式类型（C++ 版本）
   typedef rbd_mirror_image_mode_t mirror_image_mode_t;
+  /// @brief 镜像镜像状态类型（C++ 版本）
   typedef rbd_mirror_image_state_t mirror_image_state_t;
 
+  /// @brief 镜像镜像信息结构（C++ 版本）
+  /// @details 包含镜像镜像的基本信息
   typedef struct {
-    std::string global_id;
-    mirror_image_state_t state;
-    bool primary;
+    std::string global_id;     ///< 全局镜像 ID
+    mirror_image_state_t state; ///< 镜像状态
+    bool primary;              ///< 是否为主镜像
   } mirror_image_info_t;
 
+  /// @brief 镜像镜像状态类型（C++ 版本）
   typedef rbd_mirror_image_status_state_t mirror_image_status_state_t;
 
+  /// @brief 镜像镜像状态结构（C++ 版本，已废弃）
   typedef struct {
-    std::string name;
-    mirror_image_info_t info;
-    mirror_image_status_state_t state;
-    std::string description;
-    time_t last_update;
-    bool up;
+    std::string name;                           ///< 镜像名称
+    mirror_image_info_t info;                   ///< 镜像信息
+    mirror_image_status_state_t state;          ///< 镜像状态
+    std::string description;                    ///< 状态描述
+    time_t last_update;                         ///< 最后更新时间
+    bool up;                                    ///< 是否在线
   } mirror_image_status_t CEPH_RBD_DEPRECATED;
 
+  /// @brief 镜像镜像站点状态结构（C++ 版本）
   typedef struct {
-    std::string mirror_uuid;
-    mirror_image_status_state_t state;
-    std::string description;
-    time_t last_update;
-    bool up;
+    std::string mirror_uuid;                    ///< 镜像 UUID
+    mirror_image_status_state_t state;          ///< 镜像状态
+    std::string description;                    ///< 状态描述
+    time_t last_update;                         ///< 最后更新时间
+    bool up;                                    ///< 是否在线
   } mirror_image_site_status_t;
 
+  /// @brief 镜像镜像全局状态结构（C++ 版本）
+  /// @details 包含镜像在所有站点的完整状态信息
   typedef struct {
-    std::string name;
-    mirror_image_info_t info;
-    std::vector<mirror_image_site_status_t> site_statuses;
+    std::string name;                                    ///< 镜像名称
+    mirror_image_info_t info;                            ///< 镜像信息
+    std::vector<mirror_image_site_status_t> site_statuses; ///< 各站点状态列表
   } mirror_image_global_status_t;
 
+  /// @brief 分组镜像状态类型（C++ 版本）
   typedef rbd_group_image_state_t group_image_state_t;
 
+  /// @brief 分组镜像信息结构（C++ 版本）
   typedef struct {
-    std::string name;
-    int64_t pool;
-    group_image_state_t state;
+    std::string name;           ///< 分组镜像名称
+    int64_t pool;               ///< 池 ID
+    group_image_state_t state;  ///< 分组镜像状态
   } group_image_info_t;
 
+  /// @brief 分组信息结构（C++ 版本）
   typedef struct {
-    std::string name;
-    int64_t pool;
+    std::string name;  ///< 分组名称
+    int64_t pool;      ///< 池 ID
   } group_info_t;
 
+  /// @brief 分组快照状态类型（C++ 版本）
   typedef rbd_group_snap_state_t group_snap_state_t;
 
+  /// @brief 分组快照信息结构（C++ 版本）
   typedef struct {
-    std::string name;
-    group_snap_state_t state;
+    std::string name;            ///< 分组快照名称
+    group_snap_state_t state;    ///< 分组快照状态
   } group_snap_info_t;
 
+  /// @brief 镜像信息类型（C++ 版本）
   typedef rbd_image_info_t image_info_t;
 
+  /// @brief 进度上下文抽象基类
+  /// @details 用于在长时间运行的操作中报告进度
   class CEPH_RBD_API ProgressContext
   {
   public:
+    /// @brief 虚析构函数
     virtual ~ProgressContext();
+    /// @brief 更新进度回调函数
+    /// @param offset 当前进度偏移量
+    /// @param total 总大小
+    /// @return 0 表示继续，负值表示错误并中止操作
     virtual int update_progress(uint64_t offset, uint64_t total) = 0;
   };
 
+  /// @brief 垃圾回收箱镜像信息结构（C++ 版本）
   typedef struct {
-    std::string id;
-    std::string name;
-    rbd_trash_image_source_t source;
-    time_t deletion_time;
-    time_t deferment_end_time;
+    std::string id;                    ///< 镜像 ID
+    std::string name;                  ///< 镜像名称
+    rbd_trash_image_source_t source;   ///< 删除来源
+    time_t deletion_time;              ///< 删除时间
+    time_t deferment_end_time;         ///< 延期结束时间
   } trash_image_info_t;
 
+  /// @brief 子镜像信息结构（C++ 版本）
+  /// @details 包含子镜像（克隆镜像）的父镜像信息
   typedef struct {
-    std::string pool_name;
-    std::string image_name;
-    std::string image_id;
-    bool trash;
+    std::string pool_name;   ///< 父镜像池名称
+    std::string image_name;  ///< 父镜像名称
+    std::string image_id;    ///< 父镜像 ID
+    bool trash;              ///< 父镜像是否在垃圾回收箱中
   } child_info_t;
 
+  /// @brief 镜像监视器信息结构
+  /// @details 包含监视镜像的客户端信息
   typedef struct {
-    std::string addr;
-    int64_t id;
-    uint64_t cookie;
+    std::string addr;   ///< 客户端地址
+    int64_t id;         ///< 监视器 ID
+    uint64_t cookie;    ///< 监视器 cookie
   } image_watcher_t;
 
+  /// @brief 镜像迁移状态类型（C++ 版本）
   typedef rbd_image_migration_state_t image_migration_state_t;
 
+  /// @brief 镜像迁移状态结构（C++ 版本）
+  /// @details 包含镜像迁移的完整信息，包括源和目标信息
   typedef struct {
-    int64_t source_pool_id;
-    std::string source_pool_namespace;
-    std::string source_image_name;
-    std::string source_image_id;
-    int64_t dest_pool_id;
-    std::string dest_pool_namespace;
-    std::string dest_image_name;
-    std::string dest_image_id;
-    image_migration_state_t state;
-    std::string state_description;
+    int64_t source_pool_id;             ///< 源池 ID
+    std::string source_pool_namespace;  ///< 源池命名空间
+    std::string source_image_name;       ///< 源镜像名称
+    std::string source_image_id;         ///< 源镜像 ID
+    int64_t dest_pool_id;               ///< 目标池 ID
+    std::string dest_pool_namespace;    ///< 目标池命名空间
+    std::string dest_image_name;         ///< 目标镜像名称
+    std::string dest_image_id;           ///< 目标镜像 ID
+    image_migration_state_t state;      ///< 迁移状态
+    std::string state_description;       ///< 状态描述
   } image_migration_status_t;
 
+  /// @brief 配置源类型（C++ 版本）
   typedef rbd_config_source_t config_source_t;
 
+  /// @brief 配置选项结构（C++ 版本）
+  /// @details 包含配置选项的名称、值和来源信息
   typedef struct {
-    std::string name;
-    std::string value;
-    config_source_t source;
+    std::string name;     ///< 配置选项名称
+    std::string value;    ///< 配置选项值
+    config_source_t source; ///< 配置来源
   } config_option_t;
 
+  /// @brief 加密格式类型（C++ 版本）
   typedef rbd_encryption_format_t encryption_format_t;
+  /// @brief 加密算法类型（C++ 版本）
   typedef rbd_encryption_algorithm_t encryption_algorithm_t;
+  /// @brief 加密选项类型（C++ 版本）
   typedef rbd_encryption_options_t encryption_options_t;
+  /// @brief 加密规格类型（C++ 版本）
   typedef rbd_encryption_spec_t encryption_spec_t;
 
+  /// @brief LUKS1 加密格式选项结构
   typedef struct {
-    encryption_algorithm_t alg;
-    std::string passphrase;
+    encryption_algorithm_t alg;    ///< 加密算法
+    std::string passphrase;        ///< 密码
   } encryption_luks1_format_options_t;
 
+  /// @brief LUKS2 加密格式选项结构
   typedef struct {
-    encryption_algorithm_t alg;
-    std::string passphrase;
+    encryption_algorithm_t alg;    ///< 加密算法
+    std::string passphrase;        ///< 密码
   } encryption_luks2_format_options_t;
 
+  /// @brief LUKS 加密格式选项结构（通用）
   typedef struct {
-    std::string passphrase;
+    std::string passphrase;  ///< 密码
   } encryption_luks_format_options_t;
 
+/// @brief RBD 主类，提供镜像管理的基本操作
 class CEPH_RBD_API RBD
 {
 public:
+  /// @brief 默认构造函数
   RBD();
+  /// @brief 析构函数
   ~RBD();
 
-  // This must be dynamically allocated with new, and
-  // must be released with release().
-  // Do not use delete.
+  /// @brief 异步 I/O 完成回调类
+  /// @warning 此类必须使用 new 动态分配，并使用 release() 释放，不要使用 delete
   struct AioCompletion {
-    void *pc;
+    void *pc;  ///< 内部私有数据指针
+
+    /// @brief 构造函数
+    /// @param cb_arg 回调参数
+    /// @param complete_cb 完成回调函数
     AioCompletion(void *cb_arg, callback_t complete_cb);
+
+    /// @brief 检查操作是否完成
+    /// @return 操作完成返回 true，否则返回 false
     bool is_complete();
+
+    /// @brief 等待操作完成
+    /// @return 成功返回 0，失败返回负的错误码
     int wait_for_complete();
+
+    /// @brief 获取操作返回值
+    /// @return 操作结果值
     ssize_t get_return_value();
+
+    /// @brief 获取回调参数
+    /// @return 回调参数指针
     void *get_arg();
+
+    /// @brief 释放 AioCompletion 对象
     void release();
   };
 
+  /// @brief 获取 RBD 库版本信息
+  /// @param major 主版本号指针（可为 nullptr）
+  /// @param minor 次版本号指针（可为 nullptr）
+  /// @param extra 额外版本号指针（可为 nullptr）
   void version(int *major, int *minor, int *extra);
 
+  /// @brief 打开镜像（读写模式）
+  /// @param io_ctx I/O 上下文
+  /// @param image 镜像对象引用
+  /// @param name 镜像名称
+  /// @return 成功返回 0，失败返回负的错误码
   int open(IoCtx& io_ctx, Image& image, const char *name);
+
+  /// @brief 打开镜像的指定快照（读写模式）
+  /// @param io_ctx I/O 上下文
+  /// @param image 镜像对象引用
+  /// @param name 镜像名称
+  /// @param snapname 快照名称
+  /// @return 成功返回 0，失败返回负的错误码
   int open(IoCtx& io_ctx, Image& image, const char *name, const char *snapname);
+
+  /// @brief 通过 ID 打开镜像（读写模式）
+  /// @param io_ctx I/O 上下文
+  /// @param image 镜像对象引用
+  /// @param id 镜像 ID
+  /// @return 成功返回 0，失败返回负的错误码
   int open_by_id(IoCtx& io_ctx, Image& image, const char *id);
+
+  /// @brief 通过 ID 打开镜像的指定快照（读写模式）
+  /// @param io_ctx I/O 上下文
+  /// @param image 镜像对象引用
+  /// @param id 镜像 ID
+  /// @param snapname 快照名称
+  /// @return 成功返回 0，失败返回负的错误码
   int open_by_id(IoCtx& io_ctx, Image& image, const char *id, const char *snapname);
   int aio_open(IoCtx& io_ctx, Image& image, const char *name,
 	       const char *snapname, RBD::AioCompletion *c);

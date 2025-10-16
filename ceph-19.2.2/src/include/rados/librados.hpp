@@ -1,3 +1,37 @@
+/**
+ * @file librados.hpp
+ * @brief RADOS (Reliable Autonomic Distributed Object Store) 库的 C++ 接口头文件
+ *
+ * 本文件定义了 RADOS 库的 C++ 接口，提供对 Ceph 集群中分布式对象存储的完整访问。
+ * RADOS 是 Ceph 存储系统的核心组件，librados 提供了访问 RADOS 的客户端库接口。
+ *
+ * 主要功能包括：
+ * - 对象操作：创建、读取、写入、删除对象
+ * - 异步 I/O：支持高性能异步操作
+ * - 对象迭代：遍历池中的对象
+ * - 监视器：监听对象变更通知
+ * - 集群操作：池管理、集群统计等
+ * - 缓存管理：智能缓存策略
+ * - 故障恢复：自动故障检测和恢复
+ *
+ * C++ 接口在 C 接口基础上提供了：
+ * - 类型安全和异常处理
+ * - 标准库容器集成
+ * - 更好的资源管理（RAII）
+ * - 面向对象的设计模式
+ *
+ * 使用示例：
+ * @code
+ * #include <rados/librados.hpp>
+ * librados::Rados cluster;
+ * cluster.init("admin");
+ * cluster.connect();
+ * librados::IoCtx io_ctx;
+ * cluster.ioctx_create("mypool", io_ctx);
+ * io_ctx.write("myobject", "hello world", 11, 0);
+ * @endcode
+ */
+
 #ifndef __LIBRADOS_HPP
 #define __LIBRADOS_HPP
 
@@ -21,85 +55,144 @@ namespace libradosstriper
 
 namespace neorados { class RADOS; }
 
+/// @brief librados 命名空间，包含 RADOS 库的所有 C++ 接口
 namespace librados {
 
+/// @brief 使用 ceph 的 bufferlist 类型
 using ceph::bufferlist;
 
+/// @brief 异步 I/O 完成实现（内部使用）
 struct AioCompletionImpl;
+/// @brief I/O 上下文实现（内部使用）
 struct IoCtxImpl;
+/// @brief 对象列表实现（内部使用）
 struct ListObjectImpl;
+/// @brief N 对象迭代器实现（内部使用）
 class NObjectIteratorImpl;
+/// @brief 对象列表上下文（内部使用）
 struct ObjListCtx;
+/// @brief 对象操作实现（内部使用）
 class ObjectOperationImpl;
+/// @brief 放置组实现（内部使用）
 struct PlacementGroupImpl;
+/// @brief 池异步完成实现（内部使用）
 struct PoolAsyncCompletionImpl;
 
+/// @brief 集群统计信息类型
 typedef struct rados_cluster_stat_t cluster_stat_t;
+/// @brief 池统计信息类型
 typedef struct rados_pool_stat_t pool_stat_t;
 
+/// @brief 对象列表上下文类型
 typedef void *list_ctx_t;
+/// @brief 认证用户 ID 类型
 typedef uint64_t auid_t;
+/// @brief 配置类型
 typedef void *config_t;
 
+/// @brief 锁持有者信息结构
 typedef struct {
-  std::string client;
-  std::string cookie;
-  std::string address;
+  std::string client;   ///< 客户端标识符
+  std::string cookie;   ///< 锁 cookie
+  std::string address;  ///< 客户端地址
 } locker_t;
 
+/// @brief 池统计映射类型
 typedef std::map<std::string, pool_stat_t> stats_map;
 
+/// @brief 完成回调类型
 typedef void *completion_t;
+/// @brief 回调函数类型
 typedef void (*callback_t)(completion_t cb, void *arg);
 
+/// @brief v14.2.0 版本的内联命名空间
 inline namespace v14_2_0 {
 
+  /// @brief 前向声明：I/O 上下文类
   class IoCtx;
+  /// @brief 前向声明：RADOS 客户端类
   class RadosClient;
 
+  /**
+   * @brief RADOS 对象列表项类
+   *
+   * 表示 RADOS 池中的一个对象，包含对象的命名空间、对象 ID 和定位器信息。
+   * 主要用于对象迭代和列表操作。
+   */
   class CEPH_RADOS_API ListObject
   {
   public:
+    /// @brief 获取对象的命名空间
     const std::string& get_nspace() const;
+    /// @brief 获取对象 ID
     const std::string& get_oid() const;
+    /// @brief 获取对象定位器
     const std::string& get_locator() const;
 
+    /// @brief 默认构造函数
     ListObject();
+    /// @brief 析构函数
     ~ListObject();
+    /// @brief 拷贝构造函数
     ListObject( const ListObject&);
+    /// @brief 赋值运算符
     ListObject& operator=(const ListObject& rhs);
   private:
+    /// @brief 私有构造函数（仅供内部使用）
     ListObject(ListObjectImpl *impl);
 
+    /// @brief 友元类：N 对象迭代器实现
     friend class librados::NObjectIteratorImpl;
+    /// @brief 友元函数：输出流运算符
     friend std::ostream& operator<<(std::ostream& out, const ListObject& lop);
 
+    /// @brief 实现指针（内部使用）
     ListObjectImpl *impl;
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
 
   class CEPH_RADOS_API NObjectIterator;
 
+  /**
+   * @brief RADOS 对象游标类
+   *
+   * 用于在对象列表中定位和导航的对象游标。
+   * 支持基于字符串和二进制游标的序列化和反序列化。
+   */
   class CEPH_RADOS_API ObjectCursor
   {
     public:
+    /// @brief 默认构造函数
     ObjectCursor();
+    /// @brief 拷贝构造函数
     ObjectCursor(const ObjectCursor &rhs);
+    /// @brief 从 C API 游标构造
     explicit ObjectCursor(rados_object_list_cursor c);
+    /// @brief 析构函数
     ~ObjectCursor();
+    /// @brief 赋值运算符
     ObjectCursor& operator=(const ObjectCursor& rhs);
+    /// @brief 小于比较运算符
     bool operator<(const ObjectCursor &rhs) const;
+    /// @brief 等于比较运算符
     bool operator==(const ObjectCursor &rhs) const;
+    /// @brief 设置 C API 游标
     void set(rados_object_list_cursor c);
 
+    /// @brief 友元类：IoCtx
     friend class IoCtx;
+    /// @brief 友元类：N 对象迭代器实现
     friend class librados::NObjectIteratorImpl;
+    /// @brief 友元函数：输出流运算符
     friend std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
 
+    /// @brief 转换为字符串表示
     std::string to_str() const;
+    /// @brief 从字符串表示构造
     bool from_str(const std::string& s);
 
     protected:
+    /// @brief C API 游标
     rados_object_list_cursor c_cursor;
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
