@@ -1,4 +1,5 @@
-1、测试librbd库
+1、fio（Flexible I/O Tester）是一个功能非常强大的 I/O 压力测试和性能评估工具，被广泛用于测试存储系统（包括硬盘、SSD、Ceph RBD、NFS、NVMe、iSCSI 等）的读写性能
+测试librbd库
 https://github.com/axboe/fio.git
 
 
