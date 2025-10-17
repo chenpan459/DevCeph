@@ -30,6 +30,11 @@
  * cluster.ioctx_create("mypool", io_ctx);
  * io_ctx.write("myobject", "hello world", 11, 0);
  * @endcode
+ *
+ * @author Ceph 项目开发团队
+ * @version 14.2.0 (内联命名空间版本)
+ * @see librados.h 对应的 C 接口头文件
+ * @see rados_types.hpp 类型定义头文件
  */
 
 #ifndef __LIBRADOS_HPP
@@ -55,7 +60,27 @@ namespace libradosstriper
 
 namespace neorados { class RADOS; }
 
-/// @brief librados 命名空间，包含 RADOS 库的所有 C++ 接口
+/**
+ * @namespace librados
+ * @brief librados 命名空间，包含 RADOS 库的所有 C++ 接口
+ *
+ * librados 命名空间提供了完整的 Ceph RADOS (Reliable Autonomic Distributed Object Store)
+ * C++ 接口。所有类、函数和类型都定义在此命名空间中，为 Ceph 集群的对象存储操作
+ * 提供类型安全、面向对象的访问方式。
+ *
+ * 主要组件包括：
+ * - Rados：集群连接和管理的核心类
+ * - IoCtx：I/O 上下文，用于特定存储池的操作
+ * - ObjectOperation：复合对象操作，支持原子性批量操作
+ * - AioCompletion：异步 I/O 完成回调管理
+ * - 各种数据类型：用于表示对象、快照、锁等概念
+ *
+ * 使用该命名空间的典型流程：
+ * 1. 创建 Rados 实例并连接到集群
+ * 2. 创建 IoCtx 指定目标存储池
+ * 3. 执行对象读写、快照、锁等操作
+ * 4. 清理资源
+ */
 namespace librados {
 
 /// @brief 使用 ceph 的 bufferlist 类型
@@ -79,33 +104,53 @@ struct PlacementGroupImpl;
 struct PoolAsyncCompletionImpl;
 
 /// @brief 集群统计信息类型
+/// @details 表示整个 Ceph 集群的统计信息，包括存储容量、使用情况等
 typedef struct rados_cluster_stat_t cluster_stat_t;
+
 /// @brief 池统计信息类型
+/// @details 表示特定存储池的统计信息，包括对象数量、大小等
 typedef struct rados_pool_stat_t pool_stat_t;
 
-/// @brief 对象列表上下文类型
+/// @brief 对象列表上下文类型（内部使用）
 typedef void *list_ctx_t;
+
 /// @brief 认证用户 ID 类型
+/// @details 用于标识在 Ceph 集群中进行身份验证的用户
 typedef uint64_t auid_t;
-/// @brief 配置类型
+
+/// @brief 配置类型（内部使用）
 typedef void *config_t;
 
-/// @brief 锁持有者信息结构
+/**
+ * @brief 锁持有者信息结构
+ * @details 表示当前持有对象锁的客户端信息，用于对象锁管理
+ */
 typedef struct {
-  std::string client;   ///< 客户端标识符
-  std::string cookie;   ///< 锁 cookie
-  std::string address;  ///< 客户端地址
+  std::string client;   ///< 客户端标识符，唯一标识持有锁的客户端
+  std::string cookie;   ///< 锁 cookie，用于验证锁操作的合法性
+  std::string address;  ///< 客户端地址，网络位置信息
 } locker_t;
 
 /// @brief 池统计映射类型
+/// @details 将池名称映射到池统计信息的字典类型
 typedef std::map<std::string, pool_stat_t> stats_map;
 
-/// @brief 完成回调类型
+/// @brief 完成回调类型（内部使用）
 typedef void *completion_t;
+
 /// @brief 回调函数类型
+/// @details 异步操作完成时的回调函数签名
+/// @param cb 完成回调句柄
+/// @param arg 用户提供的回调参数
 typedef void (*callback_t)(completion_t cb, void *arg);
 
-/// @brief v14.2.0 版本的内联命名空间
+/**
+ * @namespace v14_2_0
+ * @brief v14.2.0 版本的内联命名空间
+ *
+ * 内联命名空间用于版本管理，确保 API 兼容性。
+ * 所有 v14.2.0 版本的声明都包含在此命名空间中。
+ */
 inline namespace v14_2_0 {
 
   /// @brief 前向声明：I/O 上下文类
@@ -252,23 +297,57 @@ inline namespace v14_2_0 {
     std::string locator;
   };
 
-  /// DEPRECATED; do not use
+  /**
+   * @class WatchCtx
+   * @brief 对象监视上下文类（已废弃）
+   * @deprecated 请使用 WatchCtx2，不要使用此类
+   */
   class CEPH_RADOS_API WatchCtx {
   public:
+    /// @brief 虚析构函数
     virtual ~WatchCtx();
+
+    /**
+     * @brief 通知回调函数（已废弃）
+     * @param opcode 操作码
+     * @param ver 版本号
+     * @param bl 通知负载
+     */
     virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) = 0;
   };
 
+  /**
+   * @class WatchCtx2
+   * @brief 对象监视上下文类（推荐使用）
+   *
+   * WatchCtx2 是用于对象监视的回调接口类。当监视的对象发生变化或出现错误时，
+   * 相应的回调函数将被调用。
+   *
+   * 使用示例：
+   * @code
+   * class MyWatchCtx : public WatchCtx2 {
+   *     void handle_notify(uint64_t notify_id, uint64_t cookie,
+   *                        uint64_t notifier_id, bufferlist& bl) override {
+   *         // 处理通知事件
+   *     }
+   *     void handle_error(uint64_t cookie, int err) override {
+   *         // 处理监视错误
+   *     }
+   * };
+   * @endcode
+   */
   class CEPH_RADOS_API WatchCtx2 {
   public:
+    /// @brief 虚析构函数
     virtual ~WatchCtx2();
+
     /**
-     * Callback activated when we receive a notify event.
-     *
-     * @param notify_id unique id for this notify event
-     * @param cookie the watcher we are notifying
-     * @param notifier_id the unique client id of the notifier
-     * @param bl opaque notify payload (from the notifier)
+     * @brief 通知事件处理回调
+     * @details 当接收到来自其他客户端的通知时被调用
+     * @param notify_id 此通知事件的唯一ID
+     * @param cookie 接收通知的监视器句柄
+     * @param notifier_id 发送通知的客户端的唯一ID
+     * @param bl 来自通知者的不透明通知负载
      */
     virtual void handle_notify(uint64_t notify_id,
 			       uint64_t cookie,
@@ -276,63 +355,206 @@ inline namespace v14_2_0 {
 			       bufferlist& bl) = 0;
 
     /**
-     * Callback activated when we encounter an error with the watch.
+     * @brief 监视错误处理回调
+     * @details 当监视出现错误时被调用
      *
-     * Errors we may see:
-     *   -ENOTCONN  : our watch was disconnected
-     *   -ETIMEDOUT : our watch is still valid, but we may have missed
-     *                a notify event.
+     * 可能出现的错误：
+     * - -ENOTCONN: 监视连接已断开
+     * - -ETIMEDOUT: 监视仍然有效，但可能错过了一个通知事件
      *
-     * @param cookie the watcher with the problem
-     * @param err error
+     * @param cookie 有问题的监视器句柄
+     * @param err 错误码
      */
     virtual void handle_error(uint64_t cookie, int err) = 0;
   };
 
+  /**
+   * @struct AioCompletion
+   * @brief 异步I/O完成回调结构体
+   *
+   * AioCompletion 用于管理异步I/O操作的完成状态和回调。
+   * 它提供了等待操作完成、检查状态、获取返回值等多种功能。
+   *
+   * 主要功能：
+   * - 设置完成和安全回调函数
+   * - 等待操作完成
+   * - 检查操作状态
+   * - 获取操作返回值和版本信息
+   * - 资源释放
+   */
   struct CEPH_RADOS_API AioCompletion {
+    /**
+     * @brief 构造函数
+     * @param pc_ 内部实现指针
+     */
     AioCompletion(AioCompletionImpl *pc_) : pc(pc_) {}
+
+    /// @brief 析构函数
     ~AioCompletion();
+
+    /**
+     * @brief 设置完成回调函数
+     * @param cb_arg 回调参数
+     * @param cb 回调函数指针
+     * @return 0表示成功，负数表示错误
+     */
     int set_complete_callback(void *cb_arg, callback_t cb);
+
+    /**
+     * @brief 设置安全回调函数（已废弃）
+     * @param cb_arg 回调参数
+     * @param cb 回调函数指针
+     * @return 0表示成功，负数表示错误
+     * @deprecated 请使用 set_complete_callback
+     */
     int set_safe_callback(void *cb_arg, callback_t cb)
       __attribute__ ((deprecated));
+
+    /**
+     * @brief 等待操作完成
+     * @return 0表示成功，负数表示错误
+     */
     int wait_for_complete();
+
+    /**
+     * @brief 等待操作安全完成（已废弃）
+     * @return 0表示成功，负数表示错误
+     * @deprecated 请使用 wait_for_complete
+     */
     int wait_for_safe() __attribute__ ((deprecated));
+
+    /**
+     * @brief 等待操作完成并执行回调
+     * @return 0表示成功，负数表示错误
+     */
     int wait_for_complete_and_cb();
+
+    /**
+     * @brief 等待操作安全完成并执行回调（已废弃）
+     * @return 0表示成功，负数表示错误
+     * @deprecated 请使用 wait_for_complete_and_cb
+     */
     int wait_for_safe_and_cb() __attribute__ ((deprecated));
+
+    /**
+     * @brief 检查操作是否完成
+     * @return 如果操作已完成返回true，否则返回false
+     */
     bool is_complete();
+
+    /**
+     * @brief 检查操作是否安全完成（已废弃）
+     * @return 如果操作已安全完成返回true，否则返回false
+     * @deprecated 请使用 is_complete
+     */
     bool is_safe() __attribute__ ((deprecated));
+
+    /**
+     * @brief 检查操作是否完成且回调已执行
+     * @return 如果操作完成且回调已执行返回true，否则返回false
+     */
     bool is_complete_and_cb();
+
+    /**
+     * @brief 检查操作是否安全完成且回调已执行（已废弃）
+     * @return 如果操作安全完成且回调已执行返回true，否则返回false
+     * @deprecated 请使用 is_complete_and_cb
+     */
     bool is_safe_and_cb() __attribute__ ((deprecated));
+
+    /**
+     * @brief 获取操作返回值
+     * @return 操作的返回值，0表示成功，负数表示错误
+     */
     int get_return_value();
+
+    /**
+     * @brief 获取对象版本号（已废弃）
+     * @return 对象版本号
+     * @deprecated 请使用 get_version64
+     */
     int get_version() __attribute__ ((deprecated));
+
+    /**
+     * @brief 获取对象版本号（64位）
+     * @return 对象版本号（64位）
+     */
     uint64_t get_version64();
+
+    /// @brief 释放资源
     void release();
+
+    /// @brief 内部实现指针
     AioCompletionImpl *pc;
   };
 
+  /**
+   * @struct PoolAsyncCompletion
+   * @brief 存储池异步操作完成回调结构体
+   *
+   * PoolAsyncCompletion 专门用于管理存储池相关的异步操作完成状态，
+   * 如创建池、删除池等操作的异步执行。
+   */
   struct CEPH_RADOS_API PoolAsyncCompletion {
+    /**
+     * @brief 构造函数
+     * @param pc_ 内部实现指针
+     */
     PoolAsyncCompletion(PoolAsyncCompletionImpl *pc_) : pc(pc_) {}
+
+    /// @brief 析构函数
     ~PoolAsyncCompletion();
+
+    /**
+     * @brief 设置完成回调函数
+     * @param cb_arg 回调参数
+     * @param cb 回调函数指针
+     * @return 0表示成功，负数表示错误
+     */
     int set_callback(void *cb_arg, callback_t cb);
+
+    /**
+     * @brief 等待操作完成
+     * @return 0表示成功，负数表示错误
+     */
     int wait();
+
+    /**
+     * @brief 检查操作是否完成
+     * @return 如果操作已完成返回true，否则返回false
+     */
     bool is_complete();
+
+    /**
+     * @brief 获取操作返回值
+     * @return 操作的返回值，0表示成功，负数表示错误
+     */
     int get_return_value();
+
+    /// @brief 释放资源
     void release();
+
+    /// @brief 内部实现指针
     PoolAsyncCompletionImpl *pc;
   };
 
   /**
-   * These are per-op flags which may be different among
-   * ops added to an ObjectOperation.
+   * @brief 对象操作标志枚举
+   * @details 这些是针对每个单独操作的标志，可以在添加到 ObjectOperation 的不同操作之间有所区别
+   *
+   * 这些标志影响特定操作的行为，例如：
+   * - OP_EXCL: 操作失败如果对象已存在
+   * - OP_FAILOK: 操作失败时不返回错误
+   * - OP_FADVISE_* : 文件访问模式建议，用于优化存储性能
    */
   enum ObjectOperationFlags {
-    OP_EXCL =   LIBRADOS_OP_FLAG_EXCL,
-    OP_FAILOK = LIBRADOS_OP_FLAG_FAILOK,
-    OP_FADVISE_RANDOM = LIBRADOS_OP_FLAG_FADVISE_RANDOM,
-    OP_FADVISE_SEQUENTIAL = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL,
-    OP_FADVISE_WILLNEED = LIBRADOS_OP_FLAG_FADVISE_WILLNEED,
-    OP_FADVISE_DONTNEED = LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
-    OP_FADVISE_NOCACHE = LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
+    OP_EXCL =   LIBRADOS_OP_FLAG_EXCL,           ///< 操作失败如果对象已存在
+    OP_FAILOK = LIBRADOS_OP_FLAG_FAILOK,         ///< 操作失败时不返回错误，继续处理其他操作
+    OP_FADVISE_RANDOM = LIBRADOS_OP_FLAG_FADVISE_RANDOM,     ///< 随机访问模式建议
+    OP_FADVISE_SEQUENTIAL = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL,  ///< 顺序访问模式建议
+    OP_FADVISE_WILLNEED = LIBRADOS_OP_FLAG_FADVISE_WILLNEED,   ///< 数据即将被访问的建议
+    OP_FADVISE_DONTNEED = LIBRADOS_OP_FLAG_FADVISE_DONTNEED,   ///< 数据短期内不会被访问的建议
+    OP_FADVISE_NOCACHE = LIBRADOS_OP_FLAG_FADVISE_NOCACHE,     ///< 不使用缓存的建议
   };
 
   class CEPH_RADOS_API ObjectOperationCompletion {
@@ -342,106 +564,185 @@ inline namespace v14_2_0 {
   };
 
   /**
-   * These flags apply to the ObjectOperation as a whole.
+   * @brief 对象操作全局标志枚举
+   * @details 这些标志适用于整个 ObjectOperation 操作，影响复合操作的整体行为
    *
-   * Prior to octopus BALANCE_READS and LOCALIZE_READS should only
-   * be used when reading from data you're certain won't change, like
-   * a snapshot, or where eventual consistency is ok.  Since octopus
-   * (get_min_compatible_osd() >= CEPH_RELEASE_OCTOPUS) both are safe
-   * for general use.
+   * 主要标志说明：
+   * - OPERATION_BALANCE_READS 和 OPERATION_LOCALIZE_READS：在 octopus 版本前，只应用于
+   *   不会更改的数据（如快照）或可以接受最终一致性的场景。从 octopus 版本开始，
+   *   这两个标志可以安全地用于一般用途。
    *
-   * ORDER_READS_WRITES will order reads the same way writes are
-   * ordered (e.g., waiting for degraded objects).  In particular, it
-   * will make a write followed by a read sequence be preserved.
+   * - OPERATION_ORDER_READS_WRITES：使读操作以与写操作相同的方式排序（例如，等待
+   *   降级的对象）。特别地，它将确保写操作后跟读操作的序列得到保持。
    *
-   * IGNORE_CACHE will skip the caching logic on the OSD that normally
-   * handles promotion of objects between tiers.  This allows an operation
-   * to operate (or read) the cached (or uncached) object, even if it is
-   * not coherent.
+   * - OPERATION_IGNORE_CACHE：跳过 OSD 上通常处理层间对象提升的缓存逻辑。这允许
+   *   操作处理缓存的（或未缓存的）对象，即使它不是连贯的。
    *
-   * IGNORE_OVERLAY will ignore the pool overlay tiering metadata and
-   * process the op directly on the destination pool.  This is useful
-   * for CACHE_FLUSH and CACHE_EVICT operations.
+   * - OPERATION_IGNORE_OVERLAY：忽略池覆盖层元数据，直接在目标池上处理操作。
+   *   这对于 CACHE_FLUSH 和 CACHE_EVICT 操作很有用。
+   *
+   * - OPERATION_FULL_TRY 和 OPERATION_FULL_FORCE：即使集群或池被标记为满，也
+   *   向集群发送请求。操作要么成功（例如，删除），要么返回 EDQUOT 或 ENOSPC。
+   *
+   * - OPERATION_RETURNVEC：启用/允许返回值和每个操作的返回代码/缓冲区。
    */
   enum ObjectOperationGlobalFlags {
-    OPERATION_NOFLAG             = LIBRADOS_OPERATION_NOFLAG,
-    OPERATION_BALANCE_READS      = LIBRADOS_OPERATION_BALANCE_READS,
-    OPERATION_LOCALIZE_READS     = LIBRADOS_OPERATION_LOCALIZE_READS,
-    OPERATION_ORDER_READS_WRITES = LIBRADOS_OPERATION_ORDER_READS_WRITES,
-    OPERATION_IGNORE_CACHE       = LIBRADOS_OPERATION_IGNORE_CACHE,
-    OPERATION_SKIPRWLOCKS        = LIBRADOS_OPERATION_SKIPRWLOCKS,
-    OPERATION_IGNORE_OVERLAY     = LIBRADOS_OPERATION_IGNORE_OVERLAY,
-    // send requests to cluster despite the cluster or pool being
-    // marked full; ops will either succeed (e.g., delete) or return
-    // EDQUOT or ENOSPC
-    OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,
-    // mainly for delete
-    OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
-    OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
-    OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
-    // enable/allow return value and per-op return code/buffers
-    OPERATION_RETURNVEC          = LIBRADOS_OPERATION_RETURNVEC,
+    OPERATION_NOFLAG             = LIBRADOS_OPERATION_NOFLAG,           ///< 无特殊标志
+    OPERATION_BALANCE_READS      = LIBRADOS_OPERATION_BALANCE_READS,     ///< 平衡读取负载到多个 OSD
+    OPERATION_LOCALIZE_READS     = LIBRADOS_OPERATION_LOCALIZE_READS,    ///< 将读取本地化到最近的 OSD
+    OPERATION_ORDER_READS_WRITES = LIBRADOS_OPERATION_ORDER_READS_WRITES, ///< 按写操作的顺序排序读操作
+    OPERATION_IGNORE_CACHE       = LIBRADOS_OPERATION_IGNORE_CACHE,     ///< 忽略缓存逻辑
+    OPERATION_SKIPRWLOCKS        = LIBRADOS_OPERATION_SKIPRWLOCKS,      ///< 跳过读写锁
+    OPERATION_IGNORE_OVERLAY     = LIBRADOS_OPERATION_IGNORE_OVERLAY,   ///< 忽略覆盖层元数据
+    OPERATION_FULL_TRY           = LIBRADOS_OPERATION_FULL_TRY,         ///< 尝试操作即使池已满
+    OPERATION_FULL_FORCE         = LIBRADOS_OPERATION_FULL_FORCE,       ///< 强制操作即使池已满（主要用于删除）
+    OPERATION_IGNORE_REDIRECT    = LIBRADOS_OPERATION_IGNORE_REDIRECT,  ///< 忽略重定向
+    OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,        ///< 按快照顺序排列操作
+    OPERATION_RETURNVEC          = LIBRADOS_OPERATION_RETURNVEC,        ///< 启用详细的返回值和错误代码
   };
 
-  /*
-   * Alloc hint flags for the alloc_hint operation.
+  /**
+   * @brief 分配提示标志枚举
+   * @details 用于 alloc_hint 操作的标志，为存储系统提供关于对象预期使用模式的提示
+   *
+   * 这些标志帮助 Ceph 优化对象在存储后端的分配和放置：
+   * - 读写模式标志：SEQUENTIAL vs RANDOM
+   * - 生存期标志：SHORTLIVED vs LONGLIVED
+   * - 压缩性标志：COMPRESSIBLE vs INCOMPRESSIBLE
+   * - 特殊模式标志：APPEND_ONLY, IMMUTABLE
    */
   enum AllocHintFlags {
-    ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
-    ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
-    ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
-    ALLOC_HINT_FLAG_RANDOM_READ = 8,
-    ALLOC_HINT_FLAG_APPEND_ONLY = 16,
-    ALLOC_HINT_FLAG_IMMUTABLE = 32,
-    ALLOC_HINT_FLAG_SHORTLIVED = 64,
-    ALLOC_HINT_FLAG_LONGLIVED = 128,
-    ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
-    ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
+    ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,     ///< 顺序写模式提示
+    ALLOC_HINT_FLAG_RANDOM_WRITE = 2,         ///< 随机写模式提示
+    ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,      ///< 顺序读模式提示
+    ALLOC_HINT_FLAG_RANDOM_READ = 8,          ///< 随机读模式提示
+    ALLOC_HINT_FLAG_APPEND_ONLY = 16,         ///< 仅追加模式提示（对象只会被追加，不会被覆盖）
+    ALLOC_HINT_FLAG_IMMUTABLE = 32,           ///< 不可变模式提示（对象创建后不会被修改）
+    ALLOC_HINT_FLAG_SHORTLIVED = 64,          ///< 短期生存对象提示（对象很快会被删除）
+    ALLOC_HINT_FLAG_LONGLIVED = 128,          ///< 长期生存对象提示（对象会长时间保留）
+    ALLOC_HINT_FLAG_COMPRESSIBLE = 256,       ///< 可压缩对象提示（对象数据可以被有效压缩）
+    ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,     ///< 不可压缩对象提示（对象数据不适合压缩）
   };
 
-  /*
-   * ObjectOperation : compound object operation
-   * Batch multiple object operations into a single request, to be applied
-   * atomically.
+  /**
+   * @class ObjectOperation
+   * @brief 复合对象操作类
+   *
+   * ObjectOperation 允许将多个对象操作批量组合成单个请求，并原子性地应用这些操作。
+   * 这提高了效率并确保了一致性，因为要么所有操作都成功，要么所有操作都失败。
+   *
+   * 支持的操作类型包括：
+   * - 读操作：stat, read, getxattr, omap_get_* 等
+   * - 写操作：write, append, setxattr, omap_set 等
+   * - 管理操作：assert_version, assert_exists, cmpext 等
+   * - 类方法调用：exec
+   *
+   * 使用示例：
+   * @code
+   * ObjectOperation op;
+   * bufferlist bl("data");
+   * op.write(0, bl);
+   * op.setxattr("key", bl);
+   * int ret = io_ctx.operate("myobject", &op);
+   * @endcode
    */
   class CEPH_RADOS_API ObjectOperation
   {
   public:
+    /// @brief 默认构造函数
     ObjectOperation();
+
+    /// @brief 虚析构函数
     virtual ~ObjectOperation();
 
+    /// @brief 删除拷贝构造函数，防止意外拷贝
     ObjectOperation(const ObjectOperation&) = delete;
+
+    /// @brief 删除赋值运算符，防止意外拷贝
     ObjectOperation& operator=(const ObjectOperation&) = delete;
 
     /**
-     * Move constructor.
-     * \warning A moved from ObjectOperation is invalid and may not be used for
-     *          any purpose. This is a hard contract violation and will
-     *          kill your program.
+     * @brief 移动构造函数
+     * @warning 被移动的 ObjectOperation 对象无效，不能用于任何目的。这是一个硬性约定，违反将导致程序崩溃。
      */
     ObjectOperation(ObjectOperation&&);
+
+    /// @brief 移动赋值运算符
     ObjectOperation& operator =(ObjectOperation&&);
 
+    /// @brief 获取操作数量
+    /// @return 当前操作队列中的操作数量
     size_t size();
+
+    /// @brief 设置操作标志（已废弃，请使用 set_op_flags2）
+    /// @deprecated 请使用 set_op_flags2(int flags)
     void set_op_flags(ObjectOperationFlags flags) __attribute__((deprecated));
-    //flag mean ObjectOperationFlags
+
+    /// @brief 设置操作标志（推荐使用）
+    /// @param flags 操作标志，ObjectOperationFlags 类型的标志
     void set_op_flags2(int flags);
 
-    void cmpext(uint64_t off, const bufferlist& cmp_bl, int *prval);
-    void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
-    void cmpxattr(const char *name, uint8_t op, uint64_t v);
-    void exec(const char *cls, const char *method, bufferlist& inbl);
-    void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
-    void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
     /**
-     * Guard operation with a check that object version == ver
-     *
-     * @param ver [in] version to check
+     * @brief 比较对象范围与缓冲区内容
+     * @param off 比较起始偏移量
+     * @param cmp_bl 要比较的缓冲区内容
+     * @param prval 返回值指针，如果比较失败，返回不匹配的偏移量
+     */
+    void cmpext(uint64_t off, const bufferlist& cmp_bl, int *prval);
+
+    /**
+     * @brief 比较扩展属性值
+     * @param name 属性名称
+     * @param op 比较操作类型
+     * @param val 要比较的缓冲区值
+     */
+    void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
+
+    /**
+     * @brief 比较扩展属性值（数值版本）
+     * @param name 属性名称
+     * @param op 比较操作类型
+     * @param v 要比较的数值
+     */
+    void cmpxattr(const char *name, uint8_t op, uint64_t v);
+
+    /**
+     * @brief 执行类方法
+     * @param cls 类名称
+     * @param method 方法名称
+     * @param inbl 输入缓冲区
+     */
+    void exec(const char *cls, const char *method, bufferlist& inbl);
+
+    /**
+     * @brief 执行类方法（带输出缓冲区）
+     * @param cls 类名称
+     * @param method 方法名称
+     * @param inbl 输入缓冲区
+     * @param obl 输出缓冲区指针
+     * @param prval 返回值指针
+     */
+    void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
+
+    /**
+     * @brief 执行类方法（带完成回调）
+     * @param cls 类名称
+     * @param method 方法名称
+     * @param inbl 输入缓冲区
+     * @param completion 完成回调对象
+     */
+    void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
+
+    /**
+     * @brief 断言对象版本
+     * @details 守卫操作，检查对象版本是否等于指定版本
+     * @param ver 要检查的版本号
      */
     void assert_version(uint64_t ver);
 
     /**
-     * Guard operation with a check that the object already exists
+     * @brief 断言对象存在
+     * @details 守卫操作，检查对象必须已经存在
      */
     void assert_exists();
 
@@ -473,50 +774,156 @@ inline namespace v14_2_0 {
     friend class Rados;
   };
 
-  /*
-   * ObjectWriteOperation : compound object write operation
-   * Batch multiple object operations into a single request, to be applied
-   * atomically.
+  /**
+   * @class ObjectWriteOperation
+   * @brief 复合对象写操作类
+   *
+   * ObjectWriteOperation 是 ObjectOperation 的子类，专门用于复合写操作。
+   * 它在基类基础上增加了写特定的操作，如创建对象、写入数据、设置属性等。
+   *
+   * 所有操作都是原子性的，要么全部成功，要么全部失败。这确保了数据的一致性。
+   *
+   * 典型用途：
+   * - 创建新对象并设置初始数据
+   * - 原子性地更新多个属性
+   * - 执行复杂的写操作序列
+   *
+   * @note 继承自 ObjectOperation，支持所有基类操作加上写特定操作
    */
   class CEPH_RADOS_API ObjectWriteOperation : public ObjectOperation
   {
   protected:
-    time_t *unused;
+    time_t *unused;  ///< 未使用的字段（为兼容性保留）
+
   public:
+    /// @brief 默认构造函数
     ObjectWriteOperation() : unused(NULL) {}
+
+    /// @brief 析构函数
     ~ObjectWriteOperation() override {}
 
+    /// @brief 默认移动构造函数
     ObjectWriteOperation(ObjectWriteOperation&&) = default;
+
+    /// @brief 默认移动赋值运算符
     ObjectWriteOperation& operator =(ObjectWriteOperation&&) = default;
 
+    /**
+     * @brief 设置修改时间（已废弃）
+     * @param pt 时间戳指针
+     * @deprecated 不再推荐使用
+     */
     void mtime(time_t *pt);
+
+    /**
+     * @brief 设置修改时间（高精度版本）
+     * @param pts 高精度时间戳指针
+     */
     void mtime2(struct timespec *pts);
 
+    /**
+     * @brief 创建对象
+     * @param exclusive 如果为true，则只有当对象不存在时才创建成功
+     */
     void create(bool exclusive);
-    void create(bool exclusive,
-		const std::string& category); ///< NOTE: category is unused
 
+    /**
+     * @brief 创建对象（带类别，已废弃）
+     * @param exclusive 如果为true，则只有当对象不存在时才创建成功
+     * @param category 对象类别（未使用）
+     * @deprecated 类别参数未使用，请使用 create(bool exclusive)
+     */
+    void create(bool exclusive, const std::string& category); ///< NOTE: category is unused
+
+    /**
+     * @brief 在指定偏移量写入数据
+     * @param off 写入起始偏移量
+     * @param bl 要写入的数据缓冲区（函数会获取缓冲区内容的所有权）
+     * @note 此调用会获取 @param bl 内容的所有权
+     */
     void write(uint64_t off, const bufferlist& bl);
+
+    /**
+     * @brief 完全替换对象内容
+     * @param bl 要写入的数据缓冲区（函数会获取缓冲区内容的所有权）
+     * @note 此调用会获取 @param bl 内容的所有权
+     */
     void write_full(const bufferlist& bl);
-    void writesame(uint64_t off, uint64_t write_len,
-		   const bufferlist& bl);
+
+    /**
+     * @brief 重复写入相同数据
+     * @param off 写入起始偏移量
+     * @param write_len 要写入的数据长度
+     * @param bl 要重复写入的数据缓冲区
+     */
+    void writesame(uint64_t off, uint64_t write_len, const bufferlist& bl);
+
+    /**
+     * @brief 追加数据到对象末尾
+     * @param bl 要追加的数据缓冲区（函数会获取缓冲区内容的所有权）
+     * @note 此调用会获取 @param bl 内容的所有权
+     */
     void append(const bufferlist& bl);
+
+    /// @brief 删除对象
     void remove();
+
+    /**
+     * @brief 截断对象到指定大小
+     * @param off 截断位置，对象大小将被设置为此值
+     */
     void truncate(uint64_t off);
+
+    /**
+     * @brief 在指定范围内写入零数据
+     * @param off 起始偏移量
+     * @param len 要写入零数据的长度
+     */
     void zero(uint64_t off, uint64_t len);
+
+    /**
+     * @brief 删除扩展属性
+     * @param name 要删除的属性名称
+     */
     void rmxattr(const char *name);
+
+    /**
+     * @brief 设置扩展属性
+     * @param name 属性名称
+     * @param bl 属性值缓冲区
+     */
     void setxattr(const char *name, const bufferlist& bl);
+
+    /**
+     * @brief 设置扩展属性（右值引用版本）
+     * @param name 属性名称
+     * @param bl 属性值缓冲区（右值引用）
+     */
     void setxattr(const char *name, const bufferlist&& bl);
+
+    /**
+     * @brief 更新跟踪映射（tmap）
+     * @param cmdbl 命令缓冲区（函数会获取缓冲区内容的所有权）
+     * @note 此调用会获取 @param cmdbl 内容的所有权
+     */
     void tmap_update(const bufferlist& cmdbl);
+
+    /**
+     * @brief 设置跟踪映射（tmap）
+     * @param bl 数据缓冲区
+     */
     void tmap_put(const bufferlist& bl);
+
+    /**
+     * @brief 自管理快照回滚
+     * @param snapid 要回滚到的快照ID
+     */
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
-     * Rollback an object to the specified snapshot id
-     *
-     * Used with pool snapshots
-     *
-     * @param snapid [in] snopshot id specified
+     * @brief 回滚对象到指定快照
+     * @details 将对象回滚到指定的快照版本，与池快照一起使用
+     * @param snapid 要回滚到的快照ID
      */
     void snap_rollback(uint64_t snapid);
 
@@ -622,25 +1029,88 @@ inline namespace v14_2_0 {
     friend class IoCtx;
   };
 
-  /*
-   * ObjectReadOperation : compound object operation that return value
-   * Batch multiple object operations into a single request, to be applied
-   * atomically.
+  /**
+   * @class ObjectReadOperation
+   * @brief 复合对象读操作类
+   *
+   * ObjectReadOperation 是 ObjectOperation 的子类，专门用于复合读操作。
+   * 它在基类基础上增加了读特定的操作，如读取对象数据、获取属性、计算校验和等。
+   *
+   * 读操作可以返回各种类型的数据，包括：
+   * - 对象元数据（大小、修改时间等）
+   * - 对象数据内容
+   * - 扩展属性和omap数据
+   * - 校验和和快照信息
+   *
+   * 所有操作都是原子性的，要么全部成功，要么全部失败。
+   *
+   * @note 继承自 ObjectOperation，支持所有基类操作加上读特定操作
    */
   class CEPH_RADOS_API ObjectReadOperation : public ObjectOperation
   {
   public:
+    /// @brief 默认构造函数
     ObjectReadOperation() {}
+
+    /// @brief 析构函数
     ~ObjectReadOperation() override {}
 
+    /// @brief 默认移动构造函数
     ObjectReadOperation(ObjectReadOperation&&) = default;
+
+    /// @brief 默认移动赋值运算符
     ObjectReadOperation& operator =(ObjectReadOperation&&) = default;
 
+    /**
+     * @brief 获取对象状态信息
+     * @param psize 返回对象大小的指针
+     * @param pmtime 返回修改时间的指针
+     * @param prval 返回操作结果的指针
+     */
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
+
+    /**
+     * @brief 获取对象状态信息（高精度时间版本）
+     * @param psize 返回对象大小的指针
+     * @param pts 返回高精度修改时间的指针
+     * @param prval 返回操作结果的指针
+     */
     void stat2(uint64_t *psize, struct timespec *pts, int *prval);
+
+    /**
+     * @brief 获取扩展属性值
+     * @param name 属性名称
+     * @param pbl 返回属性值的缓冲区指针
+     * @param prval 返回操作结果的指针
+     */
     void getxattr(const char *name, bufferlist *pbl, int *prval);
+
+    /**
+     * @brief 获取所有扩展属性
+     * @param pattrs 返回属性映射的指针（属性名->属性值）
+     * @param prval 返回操作结果的指针
+     */
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
+
+    /**
+     * @brief 读取对象数据
+     * @param off 读取起始偏移量
+     * @param len 要读取的字节数
+     * @param pbl 返回数据的缓冲区指针
+     * @param prval 返回操作结果的指针
+     */
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+
+    /**
+     * @brief 计算对象数据校验和
+     * @param type 校验和类型
+     * @param init_value_bl 初始值缓冲区
+     * @param off 计算起始偏移量
+     * @param len 计算长度
+     * @param chunk_size 分块大小
+     * @param pbl 返回校验和结果的缓冲区指针
+     * @param prval 返回操作结果的指针
+     */
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
 		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
 		  int *prval);
@@ -865,35 +1335,67 @@ inline namespace v14_2_0 {
     void tier_evict();
   };
 
-  /* IoCtx : This is a context in which we can perform I/O.
-   * It includes a Pool,
+  /**
+   * @class IoCtx
+   * @brief I/O上下文类
    *
-   * Typical use (error checking omitted):
+   * IoCtx 是librados中用于执行I/O操作的核心类。它代表一个到特定Ceph存储池的连接上下文，
+   * 通过该上下文可以对池中的对象执行各种操作，包括读、写、删除、快照管理等。
    *
-   * IoCtx p;
-   * rados.ioctx_create("my_pool", p);
-   * p->stat(&stats);
-   * ... etc ...
+   * 典型使用流程（错误检查省略）：
+   * @code
+   * IoCtx io_ctx;
+   * rados.ioctx_create("my_pool", io_ctx);
+   * io_ctx.write("myobject", bufferlist("data"), 4, 0);
+   * io_ctx.read("myobject", bl, 1024, 0);
+   * @endcode
    *
-   * NOTE: be sure to call watch_flush() prior to destroying any IoCtx
-   * that is used for watch events to ensure that racing callbacks
-   * have completed.
+   * @note 使用监视（watch）事件的IoCtx在销毁前必须调用watch_flush()，以确保竞态回调已完成。
+   *
+   * 主要功能：
+   * - 对象操作：创建、读取、写入、删除对象
+   * - 异步I/O：支持高性能异步操作
+   * - 快照管理：创建、删除、回滚快照
+   * - 对象锁：共享锁和排他锁管理
+   * - 对象监视：监听对象变更通知
+   * - 元数据操作：扩展属性和omap操作
+   * - 对象列表：遍历池中的对象
    */
   class CEPH_RADOS_API IoCtx
   {
   public:
+    /// @brief 默认构造函数
     IoCtx();
+
+    /**
+     * @brief 从rados_ioctx_t构造
+     * @param p C API的I/O上下文
+     * @param pool 目标IoCtx对象
+     */
     static void from_rados_ioctx_t(rados_ioctx_t p, IoCtx &pool);
+
+    /// @brief 拷贝构造函数
     IoCtx(const IoCtx& rhs);
+
+    /// @brief 拷贝赋值运算符
     IoCtx& operator=(const IoCtx& rhs);
+
+    /// @brief 移动构造函数
     IoCtx(IoCtx&& rhs) noexcept;
+
+    /// @brief 移动赋值运算符
     IoCtx& operator=(IoCtx&& rhs) noexcept;
 
+    /// @brief 析构函数
     ~IoCtx();
 
+    /**
+     * @brief 检查上下文是否有效
+     * @return 如果上下文有效返回true，否则返回false
+     */
     bool is_valid() const;
 
-    // Close our pool handle
+    /// @brief 关闭池连接句柄
     void close();
 
     // deep copy
@@ -1487,25 +1989,113 @@ inline namespace v14_2_0 {
 
   CEPH_RADOS_API std::ostream& operator<<(std::ostream&, const PlacementGroup&);
 
+  /**
+   * @class Rados
+   * @brief RADOS集群客户端类
+   *
+   * Rados 是librados库的核心类，负责连接和管理Ceph集群。它提供了：
+   * - 集群连接和认证
+   * - 存储池管理（创建、删除、查询）
+   * - 配置管理
+   * - 集群监控和命令执行
+   * - I/O上下文创建
+   *
+   * 使用Rados的典型流程：
+   * 1. 创建Rados实例
+   * 2. 初始化连接（指定集群ID或名称）
+   * 3. 连接到集群
+   * 4. 创建I/O上下文操作特定池
+   * 5. 执行清理和关闭
+   *
+   * @code
+   * Rados rados;
+   * rados.init("admin");
+   * rados.connect();
+   * IoCtx io_ctx;
+   * rados.ioctx_create("mypool", io_ctx);
+   * // ... 执行I/O操作 ...
+   * rados.shutdown();
+   * @endcode
+   */
   class CEPH_RADOS_API Rados
   {
   public:
+    /**
+     * @brief 获取librados版本信息
+     * @param major 主版本号指针
+     * @param minor 次版本号指针
+     * @param extra 额外版本号指针
+     */
     static void version(int *major, int *minor, int *extra);
 
+    /// @brief 默认构造函数
     Rados();
+
+    /**
+     * @brief 从现有IoCtx构造Rados（已废弃）
+     * @param ioctx 现有的I/O上下文
+     * @deprecated 不再推荐使用此构造函数
+     */
     explicit Rados(IoCtx& ioctx);
+
+    /// @brief 析构函数
     ~Rados();
+
+    /**
+     * @brief 从rados_t构造
+     * @param cluster C API的集群句柄
+     * @param rados 目标Rados对象
+     */
     static void from_rados_t(rados_t cluster, Rados &rados);
 
+    /**
+     * @brief 初始化集群连接（使用默认集群名称）
+     * @param id 客户端标识符（如"admin"）
+     * @return 0表示成功，负数表示错误
+     */
     int init(const char * const id);
+
+    /**
+     * @brief 初始化集群连接（指定集群名称）
+     * @param name 用户名称
+     * @param clustername 集群名称
+     * @param flags 初始化标志
+     * @return 0表示成功，负数表示错误
+     */
     int init2(const char * const name, const char * const clustername,
 	      uint64_t flags);
+
+    /**
+     * @brief 使用现有配置上下文初始化
+     * @param cct_ 配置上下文
+     * @return 0表示成功，负数表示错误
+     */
     int init_with_context(config_t cct_);
+
+    /// @brief 获取配置上下文
     config_t cct();
+
+    /**
+     * @brief 连接到集群
+     * @return 0表示成功，负数表示错误
+     */
     int connect();
+
+    /// @brief 关闭集群连接
     void shutdown();
+
+    /**
+     * @brief 刷新监视事件
+     * @return 0表示成功，负数表示错误
+     */
     int watch_flush();
-    int aio_watch_flush(AioCompletion*);
+
+    /**
+     * @brief 异步刷新监视事件
+     * @param c 异步完成回调
+     * @return 0表示成功，负数表示错误
+     */
+    int aio_watch_flush(AioCompletion* c);
     int conf_read_file(const char * const path) const;
     int conf_parse_argv(int argc, const char ** argv) const;
     int conf_parse_argv_remainder(int argc, const char ** argv,
