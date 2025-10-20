@@ -1,5 +1,5 @@
 
-
+1、下载代码
 
 # 确保你在源码根目录
 cd /home/work/ceph
@@ -18,7 +18,7 @@ git checkout -b main origin/main
 
 
 
-
+2、编译
 mkdir build
 cd build
 cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -40,8 +40,31 @@ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 | `WITH_SPDK=ON`        | 启用 SPDK（需提前安装）                     |
 
 
-tar --exclude='build' -zcvf ../xxx.tar.gz ./*
+tar --exclude='build' -zcvf ceph19.2.2.tar.gz ceph/*
 
 cd /home/work/ceph/build
 cmake -DBOOST_ROOT=/usr/local -DBOOST_INCLUDEDIR=/usr/local/include -DBOOST_LIBRARYDIR=/usr/local/lib ..
 ninja -j$(nproc)
+
+
+3、切换到v19.2.2版本进行编译
+
+rm -rf /home/cp/openCode/ceph
+git clone --recursive https://github.com/ceph/ceph.git -b v19.2.2 
+
+cd /home/cp/openCode/ceph
+./install-deps.sh
+./do_cmake.sh
+cd build
+ninja -j$(nproc)
+
+#######################################
+报错：CMake Error at src/CMakeLists.txt:45 (file):
+  file STRINGS file "/home/cp/openCode/ceph/src/.git_version" cannot be read.
+解决：
+cd /home/cp/openCode/ceph
+cat > src/.git_version <<'EOF'
+19.2.2-0-g0000000
+19.2.2
+EOF
+#######################################
