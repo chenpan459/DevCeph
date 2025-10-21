@@ -1,25 +1,3 @@
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
-Ran tool
-
 基于对Ceph代码库中`src/mgr`目录的详细分析，我来全面解释这个**管理器（Manager）**系统的作用：
 
 ## `src/mgr`详解
