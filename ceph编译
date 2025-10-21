@@ -64,7 +64,7 @@ ninja -j$(nproc)
 解决：
 cd /home/cp/openCode/ceph
 cat > src/.git_version <<'EOF'
-19.2.2-0-g0000000
-19.2.2
+"19.2.2-0-g0000000"
+"19.2.2"
 EOF
 #######################################

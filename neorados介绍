@@ -1,0 +1,213 @@
+## neorados 介绍
+
+**neorados** 是 Ceph 分布式存储系统中全新的异步 RADOS 客户端库，是对传统 librados 的现代化重构。它采用现代 C++ 设计模式，提供更简洁、更高效、更易用的 API 接口。
+
+### 1. **核心设计理念**
+
+#### **现代化 C++ 设计**
+```cpp
+// 使用现代 C++ 特性
+- C++20 concepts
+- std::string_view (零拷贝字符串视图)
+- std::optional (类型安全的空值处理)
+- boost::asio (异步编程框架)
+- function2 (现代函数对象库)
+- expected (错误处理库)
+```
+
+#### **异步优先设计**
+```cpp
+// 所有操作都是异步的，使用 completion tokens
+auto result = rados.execute(object, ioc, read_op, &bl, 
+    boost::asio::use_awaitable);  // C++20协程支持
+```
+
+### 2. **API 设计亮点**
+
+#### **流畅的 API 设计**
+```cpp
+// 传统 librados
+rbd_open(ioctx, "myimage", &image, NULL);
+rbd_read(image, 0, 1024, buf);
+
+// neorados (伪代码)
+auto image = rados.lookup_image("myimage");
+co_await image.read(0, 1024, buf);  // C++20 协程风格
+```
+
+#### **类型安全**
+```cpp
+// 强类型系统，避免错误
+ReadOp op;
+op.read(0, 1024, &buffer);  // 编译时检查参数
+
+WriteOp wop;
+wop.write(0, data);         // 自动推导类型
+wop.set_mtime(ceph::real_time::now());  // 类型安全的时间戳
+```
+
+#### **零拷贝优化**
+```cpp
+// 高效的内存管理
+Object obj("myobject");  // 避免字符串拷贝
+std::string_view name = obj;  // 零拷贝视图
+
+// 移动语义优化
+WriteOp op;
+op.write(0, std::move(large_buffer));  // 移动而非拷贝
+```
+
+### 3. **异步编程模型**
+
+#### **Boost.Asio 集成**
+```cpp
+// 基于 Boost.Asio 的异步编程
+boost::asio::io_context ioctx;
+neorados::RADOS rados;
+
+// 异步构建连接
+rados.build(ioctx, [&](boost::system::error_code ec, auto&& rados) {
+  if (!ec) {
+    // 连接成功，继续异步操作
+    execute_async_operations(std::move(rados));
+  }
+});
+```
+
+#### **Completion Token 支持**
+```cpp
+// 支持多种异步完成方式
+// 1. 回调函数
+rados.execute(obj, ioc, op, &bl, 
+    [](boost::system::error_code ec, auto&&...) {
+      // 处理结果
+    });
+
+// 2. C++20 协程
+auto [ec] = co_await rados.execute(obj, ioc, op, &bl);
+
+// 3. std::future
+auto future = rados.execute(obj, ioc, op, &bl, 
+    boost::asio::use_future);
+auto result = future.get();
+```
+
+### 4. **关键组件架构**
+
+#### **RADOS 类**
+```cpp
+class RADOS final {
+public:
+  // 异步构建器模式
+  class Builder {
+    Builder& set_cluster(std::string_view c);
+    Builder& set_name(std::string_view n);
+    Builder& set_conf_option(std::string_view opt, std::string_view val);
+    
+    template<boost::asio::completion_token_for<BuildSig> CompletionToken>
+    auto build(boost::asio::io_context& ioctx, CompletionToken&& token);
+  };
+
+  // 核心执行方法
+  template<boost::asio::completion_token_for<Op::Signature> CompletionToken>
+  auto execute(Object o, IOContext ioc, ReadOp op, ceph::buffer::list* bl,
+               CompletionToken&& token, uint64_t* objver = nullptr);
+};
+```
+
+#### **操作构建器模式**
+```cpp
+// 流畅的操作构建
+ReadOp op;
+op.read(0, 1024, &buffer)
+  .sparse_read(1024, 1024, &sparse_buffer, &extents)
+  .stat(&size, &mtime);
+
+WriteOp wop;
+wop.write(0, data)
+   .set_mtime(ceph::real_time::now())
+   .create(true)  // 独占创建
+   .set_alloc_hint(expected_size, write_size, flags);
+```
+
+#### **类型安全的操作**
+```cpp
+// 强类型枚举和常量
+enum class alloc_hint : uint32_t {
+  SEQUENTIAL_WRITE = 1,
+  RANDOM_WRITE = 2,
+  // ...
+};
+
+wop.set_alloc_hint(expected_size, write_size, alloc_hint::SEQUENTIAL_WRITE);
+```
+
+### 5. **与传统 librados 的对比**
+
+| 特性 | 传统 librados | neorados |
+|------|---------------|----------|
+| **编程范式** | 同步 + 异步回调 | 纯异步 + 协程 |
+| **类型安全** | C 风格，弱类型 | 强类型，编译时检查 |
+| **内存管理** | 手动管理 | RAII + 智能指针 |
+| **错误处理** | 错误码 | expected + error_code |
+| **API 风格** | 函数式 | 流畅接口 + 方法链 |
+| **并发模型** | 线程池 | Asio 事件循环 |
+
+### 6. **优势和创新**
+
+#### **性能优势**
+- **零拷贝**：大量使用 `std::string_view` 和移动语义
+- **内存池**：内置对象池减少分配开销
+- **批量操作**：支持一次调用处理多个操作
+
+#### **开发体验提升**
+- **类型安全**：编译时错误检查，避免运行时错误
+- **自文档化**：流畅的 API 设计使代码更具可读性
+- **现代 IDE 支持**：更好的自动补全和错误提示
+
+#### **维护性改进**
+- **模块化设计**：清晰的职责分离
+- **测试友好**：易于单元测试和集成测试
+- **向前兼容**：可与现有 librados 代码共存
+
+### 7. **实际应用示例**
+
+#### **简单读操作**
+```cpp
+// 使用 C++20 协程
+boost::asio::co_spawn(ioctx, [&]() -> boost::asio::awaitable<void> {
+  auto obj = Object("myobject");
+  auto ioc = IOContext(pool_id);
+  
+  ReadOp op;
+  op.read(0, 1024, &buffer);
+  
+  auto [ec] = co_await rados.execute(obj, ioc, op, &buffer);
+  if (!ec) {
+    // 处理读取的数据
+    std::cout << "Read " << buffer.length() << " bytes\n";
+  }
+}, boost::asio::detached);
+```
+
+#### **复杂写操作**
+```cpp
+WriteOp op;
+op.create(true)  // 独占创建
+  .write(0, data)
+  .set_mtime(ceph::real_time::now())
+  .set_alloc_hint(4*1024*1024, 1024, alloc_hint::SEQUENTIAL_WRITE);
+
+auto [ec] = co_await rados.execute(obj, ioc, op, nullptr);
+```
+
+### 8. **未来发展方向**
+
+neorados 代表了 Ceph 客户端库的未来发展方向，它正在逐步取代传统的 librados，为 Ceph 生态系统提供：
+
+- **更好的性能**：通过现代化 C++ 技术和异步设计
+- **更强的类型安全**：编译时检查减少运行时错误
+- **更佳的开发体验**：现代 API 设计和工具支持
+- **更强的扩展性**：模块化架构便于功能扩展
+
+总之，neorados 是 Ceph 向现代 C++ 异步编程转型的重要里程碑，为分布式存储系统的客户端开发树立了新的标杆。

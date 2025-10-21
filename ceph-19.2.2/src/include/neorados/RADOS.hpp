@@ -1380,29 +1380,38 @@ public:
 	       ceph::buffer::list* bl,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
 	       const blkin_trace_info* trace_info = nullptr) {
+
+
     auto consigned = boost::asio::consign(
-      std::forward<CompletionToken>(token), boost::asio::make_work_guard(
+      std::forward<CompletionToken>(token), 
+      boost::asio::make_work_guard(
 	boost::asio::get_associated_executor(token, get_executor())));
+
+
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
       [o = std::move(o), ioc = std::move(ioc), op = std::move(op),
        bl, objver, trace_info, this](auto&& handler) mutable {
 	execute_(std::move(o), std::move(ioc), std::move(op), bl,
 		 std::move(handler), objver, trace_info);
       }, consigned);
+
+
   }
 
   template<boost::asio::completion_token_for<Op::Signature> CompletionToken>
   auto execute(Object o, IOContext ioc, WriteOp op,
 	       CompletionToken&& token, uint64_t* objver = nullptr,
 	       const blkin_trace_info* trace_info = nullptr) {
+
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
-	boost::asio::get_associated_executor(token, get_executor())));
+	    boost::asio::get_associated_executor(token, get_executor())));
+
     return boost::asio::async_initiate<decltype(consigned), Op::Signature>(
       [o = std::move(o), ioc = std::move(ioc), op = std::move(op),
        objver, trace_info, this](auto&& handler) mutable {
-	execute_(std::move(o), std::move(ioc), std::move(op),
-		 std::move(handler), objver, trace_info);
+	     execute_(std::move(o), std::move(ioc), std::move(op),
+		   std::move(handler), objver, trace_info);
       }, consigned);
   }
 
