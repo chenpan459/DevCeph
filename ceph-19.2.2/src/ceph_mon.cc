@@ -12,71 +12,93 @@
  * 
  */
 
-#if 0
-/*
- * 文件说明（中文）：
- *
- * 本文件是 Ceph MON（Monitor）守护进程的主入口文件，负责：
- * - 启动和管理 Ceph 集群的监控服务
- * - 维护集群的元数据（MonMap、OSDMap、PGMap 等）
- * - 处理集群成员管理、故障检测和恢复
- * - 提供 Paxos 协议实现，确保集群状态一致性
- * - 管理认证、配置和集群拓扑信息
- *
- * 主要功能模块：
- * 1) 初始化：解析命令行参数、加载配置、创建存储后端
- * 2) 启动：创建 Messenger、Monitor 实例，绑定网络地址
- * 3) 运行：进入主循环，处理客户端请求和集群事件
- * 4) 关闭：优雅关闭，清理资源
- *
- * 关键组件：
- * - Monitor：MON 核心实现类，管理集群状态
- * - MonitorDBStore：MON 数据存储后端
- * - Messenger：网络通信层
- * - MonMap：MON 映射表，记录集群拓扑
- *
- * 使用方式：
+/**
+ * @file ceph_mon.cc
+ * @brief Ceph Monitor (MON) 守护进程主程序
+ * 
+ * 本文件是 Ceph 集群监控服务的主入口程序，负责维护集群的元数据和状态一致性。
+ * Monitor 是 Ceph 集群的核心组件，提供 Paxos 协议实现，确保集群状态的一致性。
+ * 
+ * 主要功能：
+ * - 维护集群元数据（MonMap、OSDMap、PGMap、MDSMap 等）
+ * - 实现 Paxos 一致性协议，确保集群状态同步
+ * - 处理集群成员管理、故障检测和自动恢复
+ * - 管理认证、授权和配置信息
+ * - 提供集群拓扑和状态查询服务
+ * - 协调 OSD、MDS 等组件的状态变更
+ * 
+ * 核心组件：
+ * - Monitor：MON 核心实现类，管理集群状态和 Paxos 协议
+ * - MonitorDBStore：MON 数据存储后端，持久化集群元数据
+ * - Messenger：网络通信层，处理集群间通信
+ * - MonMap：MON 映射表，记录集群拓扑和成员信息
+ * 
+ * 工作模式：
+ * 1. 创建文件系统模式（--mkfs）：初始化 MON 存储，创建初始集群配置
+ * 2. 正常服务模式：启动 MON 服务，参与集群状态管理
+ * 3. 维护模式：支持压缩存储、强制同步等维护操作
+ * 
+ * 使用示例：
  * - 创建文件系统：ceph-mon --mkfs -i <id> --mon-data <path>
  * - 启动服务：ceph-mon -i <id> --mon-data <path>
- * - 管理操作：支持 --compact、--force-sync 等维护选项
+ * - 压缩存储：ceph-mon -i <id> --mon-data <path> --compact
+ * - 强制同步：ceph-mon -i <id> --mon-data <path> --force-sync --yes-i-really-mean-it
+ * 
+ * 安全特性：
+ * - 支持多 MON 集群，提供高可用性
+ * - 实现 Paxos 协议，确保强一致性
+ * - 支持故障检测和自动恢复
+ * - 提供数据完整性校验和版本控制
  */
-#endif
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 
-#include <iostream>
-#include <string>
+// 标准 C 库头文件
+#include <sys/types.h>    // 系统数据类型定义
+#include <sys/stat.h>     // 文件状态信息
+#include <fcntl.h>        // 文件控制操作
 
-#include "common/config.h"
-#include "include/ceph_features.h"
+// 标准 C++ 库头文件
+#include <iostream>       // 输入输出流
+#include <string>         // 字符串类
 
-#include "mon/MonMap.h"
-#include "mon/Monitor.h"
-#include "mon/MonitorDBStore.h"
-#include "mon/MonClient.h"
+// Ceph 通用组件
+#include "common/config.h"        // 配置管理系统
+#include "include/ceph_features.h" // Ceph 功能特性定义
 
-#include "msg/Messenger.h"
+// Ceph Monitor 核心组件
+#include "mon/MonMap.h"           // MON 映射表，记录集群拓扑
+#include "mon/Monitor.h"          // Monitor 核心实现类
+#include "mon/MonitorDBStore.h"   // MON 数据存储后端
+#include "mon/MonClient.h"        // MON 客户端
 
-#include "include/CompatSet.h"
+// Ceph 消息传递组件
+#include "msg/Messenger.h"        // 网络消息传递器
 
-#include "common/ceph_argparse.h"
-#include "common/pick_address.h"
-#include "common/Throttle.h"
-#include "common/Timer.h"
-#include "common/errno.h"
-#include "common/Preforker.h"
+// Ceph 兼容性组件
+#include "include/CompatSet.h"    // 兼容性集合
 
-#include "global/global_init.h"
-#include "global/signal_handler.h"
+// Ceph 通用工具组件
+#include "common/ceph_argparse.h" // 命令行参数解析
+#include "common/pick_address.h"  // 地址选择工具
+#include "common/Throttle.h"      // 流量限制器
+#include "common/Timer.h"         // 定时器
+#include "common/errno.h"         // 错误码定义
+#include "common/Preforker.h"     // 预分叉处理器
 
-#include "perfglue/heap_profiler.h"
+// Ceph 全局组件
+#include "global/global_init.h"   // 全局初始化
+#include "global/signal_handler.h" // 信号处理器
 
-#include "include/ceph_assert.h"
+// 性能分析组件
+#include "perfglue/heap_profiler.h" // 堆内存分析器
 
+// Ceph 断言组件
+#include "include/ceph_assert.h"  // 断言宏定义
+
+// 调试输出子系统定义
 #define dout_subsys ceph_subsys_mon
 
+// 标准命名空间使用声明
 using std::cerr;
 using std::cout;
 using std::list;
@@ -85,16 +107,30 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+// Ceph 命名空间使用声明
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::JSONFormatter;
 
+/**
+ * @brief 全局 Monitor 实例指针
+ * 
+ * 用于信号处理器访问 Monitor 实例，实现信号处理功能。
+ * 在程序启动时创建，在程序结束时清理。
+ */
 Monitor *mon = NULL;
 
-/*
- * 信号处理函数：处理发送给 MON 进程的信号
- * @param signum 信号编号（如 SIGTERM、SIGINT 等）
+/**
+ * @brief MON 进程信号处理函数
+ * 
+ * 处理发送给 MON 进程的各种信号，如 SIGTERM、SIGINT、SIGHUP 等。
+ * 将信号转发给 Monitor 实例进行具体处理。
+ * 
+ * @param signum 信号编号
+ *               - SIGTERM: 终止信号，用于优雅关闭
+ *               - SIGINT:  中断信号（Ctrl+C），用于强制关闭
+ *               - SIGHUP:  挂起信号，用于重新加载配置
  */
 void handle_mon_signal(int signum)
 {
@@ -103,17 +139,25 @@ void handle_mon_signal(int signum)
 }
 
 
-/*
- * 从存储中获取 MonMap（MON 映射表）
- * MonMap 可能存储在以下几个位置：
- * 1) 'monmap:<latest_version_no>' - 最新提交的 MonMap
- * 2) 'mon_sync:temp_newer_monmap' - 临时存储的新版本 MonMap（用于引导）
- * 3) 'mon_sync:latest_monmap' - 上次同步备份的 MonMap
- * 4) 'mkfs:monmap' - mkfs 命令创建的初始 MonMap
+/**
+ * @brief 从存储中获取 MonMap（MON 映射表）
  * 
- * @param store MON 数据存储后端
- * @param bl 输出参数，存储 MonMap 数据
- * @return 0 成功，-ENOENT 未找到 MonMap
+ * MonMap 记录了集群中所有 MON 节点的拓扑信息和状态。
+ * 函数按优先级顺序查找 MonMap，确保获取到最新且有效的映射表。
+ * 
+ * MonMap 存储位置优先级：
+ * 1. 'monmap:<latest_version_no>' - 最新提交的 MonMap（最高优先级）
+ * 2. 'mon_sync:temp_newer_monmap' - 临时存储的新版本 MonMap（用于引导）
+ * 3. 'mon_sync:latest_monmap' - 上次同步备份的 MonMap
+ * 4. 'mkfs:monmap' - mkfs 命令创建的初始 MonMap（最低优先级）
+ * 
+ * @param store MON 数据存储后端，用于读取 MonMap 数据
+ * @param bl 输出参数，存储解码后的 MonMap 数据
+ * @return 0 成功获取 MonMap
+ * @return -ENOENT 未找到任何有效的 MonMap
+ * 
+ * @note 函数会检查临时存储的新版本 MonMap，如果其版本号更高，
+ *       则使用新版本替代已提交的版本。
  */
 int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
 {
@@ -188,9 +232,15 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   return -ENOENT;
 }
 
-/*
- * 检查 MON 数据目录是否存在
- * @return 0 存在，-errno 不存在或访问错误
+/**
+ * @brief 检查 MON 数据目录是否存在
+ * 
+ * 验证配置的 MON 数据目录是否可访问，这是 MON 启动的前提条件。
+ * 
+ * @return 0 目录存在且可访问
+ * @return -errno 目录不存在或访问错误
+ *         - ENOENT: 目录不存在
+ *         - 其他错误码: 权限不足或其他系统错误
  */
 int check_mon_data_exists()
 {
@@ -205,16 +255,22 @@ int check_mon_data_exists()
   return 0;
 }
 
-/** Check whether **mon data** is empty.
- *
- * Being empty means mkfs has not been run and there's no monitor setup
- * at **g_conf()->mon_data**.
- *
- * If the directory g_conf()->mon_data is not empty we will return -ENOTEMPTY.
- * Otherwise we will return 0.  Any other negative returns will represent
- * a failure to be handled by the caller.
- *
- * @return **0** on success, -ENOTEMPTY if not empty or **-errno** otherwise.
+/**
+ * @brief 检查 MON 数据目录是否为空
+ * 
+ * 验证 MON 数据目录是否为空，用于判断是否需要执行 mkfs 操作。
+ * 空目录表示尚未初始化 MON 存储，需要先运行 mkfs 命令。
+ * 
+ * 检查规则：
+ * - 忽略 "." 和 ".." 目录项
+ * - 忽略 "kv_backend" 目录（存储后端相关）
+ * - 其他任何文件或目录都视为非空
+ * 
+ * @return 0 目录为空，可以执行 mkfs
+ * @return -ENOTEMPTY 目录不为空，可能已存在 MON 实例
+ * @return -errno 访问目录时发生错误
+ * 
+ * @note 此函数用于防止意外覆盖已存在的 MON 数据
  */
 int check_mon_data_empty()
 {
@@ -246,6 +302,12 @@ int check_mon_data_empty()
   return code;
 }
 
+/**
+ * @brief 显示 ceph-mon 使用帮助信息
+ * 
+ * 输出 ceph-mon 命令的完整使用说明，包括所有支持的选项和参数。
+ * 帮助信息包括基本用法、调试选项、维护操作等。
+ */
 static void usage()
 {
   cout << "usage: ceph-mon -i <ID> [flags]\n"
@@ -273,11 +335,22 @@ static void usage()
   generic_server_usage();
 }
 
-/*
- * 根据单个地址创建 MON 地址向量
- * 支持多种协议类型（MSGR2、LEGACY）和端口配置
- * @param a 输入地址
- * @return 地址向量
+/**
+ * @brief 根据单个地址创建 MON 地址向量
+ * 
+ * 将单个网络地址转换为包含多种协议类型的地址向量，
+ * 确保 MON 能够支持不同版本的客户端连接。
+ * 
+ * 地址转换规则：
+ * - 端口为 0：同时支持 MSGR2 和 LEGACY 协议
+ * - 端口为 CEPH_MON_PORT_LEGACY：仅支持 LEGACY 协议
+ * - 类型为 TYPE_ANY：转换为 MSGR2 协议
+ * - 其他情况：保持原地址不变
+ * 
+ * @param a 输入的网络地址
+ * @return entity_addrvec_t 包含多个协议版本的地址向量
+ * 
+ * @note 此函数确保向后兼容性，支持不同版本的 Ceph 客户端
  */
 entity_addrvec_t make_mon_addrs(entity_addr_t a)
 {
@@ -301,23 +374,36 @@ entity_addrvec_t make_mon_addrs(entity_addr_t a)
   return addrs;
 }
 
-/*
- * MON 守护进程主函数
+/**
+ * @brief Ceph Monitor 守护进程主函数
  * 
- * 主要流程：
- * 1) 解析命令行参数和配置
- * 2) 处理特殊操作（--mkfs、--compact、--force-sync 等）
- * 3) 初始化网络通信和存储后端
- * 4) 创建并启动 Monitor 实例
- * 5) 进入主循环，处理请求
- * 6) 优雅关闭和资源清理
+ * 这是 ceph-mon 程序的主入口点，负责启动和管理 Ceph 集群的监控服务。
+ * 支持多种运行模式：文件系统创建、正常服务、维护操作等。
+ * 
+ * 主要执行流程：
+ * 1. 参数解析：解析命令行参数和配置文件
+ * 2. 特殊操作：处理 --mkfs、--compact、--force-sync 等维护操作
+ * 3. 初始化：创建存储后端、网络通信、Monitor 实例
+ * 4. 启动服务：绑定网络地址、启动消息传递、进入主循环
+ * 5. 运行监控：处理集群状态变更、维护一致性
+ * 6. 优雅关闭：清理资源、保存状态
+ * 
+ * 支持的操作模式：
+ * - 创建文件系统（--mkfs）：初始化 MON 存储，创建初始集群配置
+ * - 正常服务模式：启动 MON 服务，参与集群状态管理
+ * - 维护模式：压缩存储、强制同步、注入/提取 MonMap
  * 
  * @param argc 命令行参数个数
  * @param argv 命令行参数数组
- * @return 0 成功，非0 失败
+ * @return 0 程序成功执行
+ * @return 非0 程序执行失败，返回相应的错误码
+ * 
+ * @note 程序支持守护进程模式，可通过配置启用后台运行
  */
 int main(int argc, const char **argv)
 {
+  // ==================== 第一阶段：程序初始化和参数准备 ====================
+  
   // 设置进程名，避免重启后进程名变成 "exe"
   ceph_pthread_setname(pthread_self(), "ceph-mon");
   
@@ -325,16 +411,19 @@ int main(int argc, const char **argv)
 
   int err;
 
-  // 解析命令行参数
+  // 声明命令行参数变量
   bool mkfs = false;           // 是否创建文件系统
   bool compact = false;        // 是否压缩存储
   bool force_sync = false;     // 是否强制同步
   bool yes_really = false;     // 确认强制同步操作
   std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
 
+  // ==================== 第二阶段：命令行参数解析 ====================
+  
   auto args = argv_to_vec(argc, argv);
   dout(10) << "ceph-mon: parsed " << args.size() << " arguments" << dendl;
   
+  // 检查基本参数
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
@@ -344,6 +433,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
+  // ==================== 第三阶段：配置初始化和标志设置 ====================
+  
   // 设置 MON 特定的默认配置值
   // 这些选项也被 OSD 使用，所以不能修改全局默认值
   // 用户定义的选项会覆盖这些默认值
@@ -375,6 +466,8 @@ int main(int argc, const char **argv)
   // 启动期间不从 MON 集群获取配置
   flags |= CINIT_FLAG_NO_MON_CONFIG;
 
+  // ==================== 第四阶段：全局初始化和配置解析 ====================
+  
   // 全局初始化：创建 CephContext，解析配置
   dout(10) << "ceph-mon: initializing global context" << dendl;
   auto cct = global_init(&defaults, args,
@@ -383,44 +476,59 @@ int main(int argc, const char **argv)
   ceph_heap_profiler_init();  // 初始化堆分析器
   dout(10) << "ceph-mon: global context initialized" << dendl;
 
+  // ==================== 第五阶段：详细参数解析和验证 ====================
+  
   std::string val;
   dout(10) << "ceph-mon: parsing command line arguments" << dendl;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
+      // 遇到 "--" 分隔符，停止处理 Ceph 特定选项
       break;
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
+      // 创建文件系统模式
       mkfs = true;
       dout(10) << "ceph-mon: mkfs flag detected" << dendl;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
+      // 压缩存储模式
       compact = true;
       dout(10) << "ceph-mon: compact flag detected" << dendl;
     } else if (ceph_argparse_flag(args, i, "--force-sync", (char*)NULL)) {
+      // 强制同步模式
       force_sync = true;
       dout(10) << "ceph-mon: force-sync flag detected" << dendl;
     } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it", (char*)NULL)) {
+      // 确认强制同步操作
       yes_really = true;
       dout(10) << "ceph-mon: yes-i-really-mean-it flag detected" << dendl;
     } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
+      // OSD 映射文件路径
       osdmapfn = val;
       dout(10) << "ceph-mon: osdmap file: " << osdmapfn << dendl;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
+      // 注入 MonMap 文件路径
       inject_monmap = val;
       dout(10) << "ceph-mon: inject monmap file: " << inject_monmap << dendl;
     } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
+      // 提取 MonMap 文件路径
       extract_monmap = val;
       dout(10) << "ceph-mon: extract monmap file: " << extract_monmap << dendl;
     } else if (ceph_argparse_witharg(args, i, &val, "--set-crush-location", (char*)NULL)) {
+      // CRUSH 位置设置
       crush_loc = val;
       dout(10) << "ceph-mon: crush location: " << crush_loc << dendl;
     } else {
+      // 未识别的参数，跳过
       ++i;
     }
   }
+  // 检查未处理的参数
   if (!args.empty()) {
     cerr << "too many arguments: " << args << std::endl;
     exit(1);
   }
 
+  // ==================== 第六阶段：参数验证和安全性检查 ====================
+  
   // 验证强制同步操作的安全性
   if (force_sync && !yes_really) {
     cerr << "are you SURE you want to force a sync?  this will erase local data and may\n"
@@ -441,10 +549,11 @@ int main(int argc, const char **argv)
   }
   dout(10) << "ceph-mon: monitor name: " << g_conf()->name << dendl;
 
+  // 创建 MON 数据存储后端
   MonitorDBStore store(g_conf()->mon_data);
   dout(10) << "ceph-mon: created MonitorDBStore for path: " << g_conf()->mon_data << dendl;
 
-  // ========== 创建 MON 文件系统 (mkfs) ==========
+  // ==================== 第七阶段：创建 MON 文件系统 (mkfs) ====================
   if (mkfs) {
     dout(0) << "ceph-mon: starting mkfs operation" << dendl;
 
@@ -634,7 +743,7 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  // ========== 正常启动 MON 服务 ==========
+  // ==================== 第八阶段：正常启动 MON 服务 ====================
   dout(0) << "ceph-mon: starting normal monitor service" << dendl;
   
   // 检查 MON 数据目录是否存在
@@ -892,7 +1001,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  // ========== 创建网络通信和 Monitor 实例 ==========
+  // ==================== 第九阶段：创建网络通信和 Monitor 实例 ====================
   dout(10) << "ceph-mon: creating network communication and Monitor instance" << dendl;
   
   // 获取当前 MON 在集群中的排名
@@ -994,7 +1103,7 @@ int main(int argc, const char **argv)
     *_dout << dendl;
   }
 
-  // ========== 启动和运行 MON 服务 ==========
+  // ==================== 第十阶段：启动和运行 MON 服务 ====================
   dout(0) << "ceph-mon: starting monitor service" << dendl;
   
   // 预初始化 Monitor
@@ -1057,7 +1166,7 @@ int main(int argc, const char **argv)
   mgr_msgr->wait();
   dout(0) << "ceph-mon: main event loop ended" << dendl;
 
-  // ========== 清理和退出 ==========
+  // ==================== 第十一阶段：清理和退出 ====================
   dout(0) << "ceph-mon: starting cleanup and shutdown" << dendl;
   
   // 关闭存储
