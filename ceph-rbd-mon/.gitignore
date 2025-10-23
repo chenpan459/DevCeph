@@ -1,0 +1,103 @@
+# 构建目录
+build/
+Build/
+BUILD/
+
+# CMake生成的文件
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+!*.cmake.in
+
+# 编译产物
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.exe
+*.out
+
+# 调试文件
+*.pdb
+*.ilk
+*.exp
+*.map
+
+# IDE文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 日志文件
+*.log
+*.tmp
+
+# 包文件
+*.tar.gz
+*.tar.bz2
+*.zip
+*.deb
+*.rpm
+
+# 测试覆盖率
+*.gcov
+*.gcno
+*.gcda
+coverage/
+
+# 性能分析文件
+*.prof
+perf.data*
+callgrind.out.*
+
+# 临时文件
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# 安装文件
+install_manifest.txt
+
+# pkg-config文件
+*.pc
+!*.pc.in
+
+# 版本文件
+ceph_ver.h
+
+# 文档生成
+docs/html/
+docs/latex/
+Doxyfile.bak
+
+# 依赖目录
+deps/
+third_party/
+
+# 环境文件
+.env
+.env.local
+.env.*.local
+
+# 配置缓存
+config.cache
+config.status
+config.log
+
+# 自动生成的文件
+auto/
+autom4te.cache/
