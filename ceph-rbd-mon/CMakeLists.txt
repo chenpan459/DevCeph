@@ -1,95 +1,130 @@
-# 最小CMake版本
 cmake_minimum_required(VERSION 3.16)
+project(ceph_rbd_only LANGUAGES C CXX)
 
-# 项目定义
-project(ceph-minimal
-  VERSION 19.2.2
-  LANGUAGES CXX C)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# 设置输出目录
+# third_party目录路径
+set(THIRD_PARTY_DIR ${CMAKE_SOURCE_DIR}/third_party)
+
+# Boost配置
+set(BOOST_VERSION 1.82.0)
+set(BOOST_ARCHIVE ${THIRD_PARTY_DIR}/boost_${BOOST_VERSION}.tar.bz2)
+set(BOOST_SOURCE_DIR ${CMAKE_BINARY_DIR}/boost_${BOOST_VERSION})
+set(BOOST_INSTALL_DIR ${CMAKE_BINARY_DIR}/boost_install)
+
+# 检查Boost源代码是否存在
+if(NOT EXISTS ${BOOST_SOURCE_DIR})
+    message(STATUS "Extracting Boost ${BOOST_VERSION} from ${BOOST_ARCHIVE}")
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR})
+
+    # 解压Boost
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E tar xjf ${BOOST_ARCHIVE}
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        RESULT_VARIABLE EXTRACT_RESULT
+    )
+
+    if(NOT EXTRACT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to extract Boost archive")
+    endif()
+endif()
+
+# 构建Boost
+if(NOT EXISTS ${BOOST_INSTALL_DIR})
+    message(STATUS "Building Boost ${BOOST_VERSION}")
+
+    # 配置Boost构建
+    execute_process(
+        COMMAND ${BOOST_SOURCE_DIR}/bootstrap.sh --prefix=${BOOST_INSTALL_DIR}
+        WORKING_DIRECTORY ${BOOST_SOURCE_DIR}
+        RESULT_VARIABLE BOOTSTRAP_RESULT
+    )
+
+    if(NOT BOOTSTRAP_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to bootstrap Boost")
+    endif()
+
+    # 构建Boost（只构建需要的组件）
+    execute_process(
+        COMMAND ${BOOST_SOURCE_DIR}/b2 install
+            --prefix=${BOOST_INSTALL_DIR}
+            --with-system
+            --with-thread
+            --with-random
+            --with-iostreams
+            --with-program_options
+            --with-chrono
+            --with-date_time
+            --with-regex
+            --with-atomic
+            --with-context
+            --with-coroutine
+            threading=multi
+            variant=release
+            link=static
+            runtime-link=shared
+        WORKING_DIRECTORY ${BOOST_SOURCE_DIR}
+        RESULT_VARIABLE BUILD_RESULT
+    )
+
+    if(NOT BUILD_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to build Boost")
+    endif()
+endif()
+
+# 设置Boost路径
+set(Boost_ROOT ${BOOST_INSTALL_DIR})
+set(Boost_NO_SYSTEM_PATHS ON)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+
+# 查找Boost
+find_package(Boost ${BOOST_VERSION} REQUIRED COMPONENTS
+    system thread random iostreams program_options chrono date_time regex atomic context coroutine)
+
+# 输出Boost信息
+message(STATUS "Boost include dirs: ${Boost_INCLUDE_DIRS}")
+message(STATUS "Boost libraries: ${Boost_LIBRARIES}")
+message(STATUS "Boost version: ${Boost_VERSION}")
+message(STATUS "Boost root: ${Boost_ROOT}")
+
+include_directories(${Boost_INCLUDE_DIRS})
+
+# 添加Boost库目录到链接路径
+link_directories(${BOOST_INSTALL_DIR}/lib)
+
+# 输出路径
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-# 包含目录
+# Ceph 自身头文件路径
 include_directories(
-  ${PROJECT_BINARY_DIR}/src/include
-  ${PROJECT_SOURCE_DIR}/src)
+  ${CMAKE_SOURCE_DIR}/src
+  ${CMAKE_SOURCE_DIR}/src/include
+  ${CMAKE_SOURCE_DIR}/src/common
+  ${CMAKE_SOURCE_DIR}/src/librados
+  ${CMAKE_SOURCE_DIR}/src/librbd
+  ${CMAKE_SOURCE_DIR}/src/libradosstriper
+  ${CMAKE_SOURCE_DIR}/src/messages
+  ${CMAKE_SOURCE_DIR}/src/msg
+  ${CMAKE_SOURCE_DIR}/src/osdc
+  
 
-# 启用C++17标准
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# 查找必需的包
-find_package(Threads REQUIRED)
-find_package(OpenSSL REQUIRED)
-find_package(ZLIB REQUIRED)
-
-# 查找src目录下所有包含CMakeLists.txt的子目录并添加
-file(GLOB_RECURSE SUB_CMAKELISTS 
-  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-  "src/*/CMakeLists.txt"
 )
 
-# 存储已添加的子目录路径，避免重复添加
-set(ADDED_SUBDIRS "")
+# 查找外部依赖
+find_package(OpenSSL REQUIRED)
+find_package(Threads REQUIRED)
 
-foreach(cmake_file ${SUB_CMAKELISTS})
-  # 提取目录路径
-  get_filename_component(subdir ${cmake_file} DIRECTORY)
-  
-  # 检查是否已经添加过该子目录（避免重复添加）
-  list(FIND ADDED_SUBDIRS ${subdir} subdir_index)
-  if(${subdir_index} EQUAL -1)
-    # 添加子目录到构建系统
-    add_subdirectory(${subdir})
-    # 记录已添加的子目录
-    list(APPEND ADDED_SUBDIRS ${subdir})
-  endif()
-endforeach()
-
-# 收集未被子CMakeLists.txt处理的源文件
-# 先获取所有源文件
-file(GLOB_RECURSE ALL_SOURCES "src/*.cc" "src/*.cpp" "src/*.c")
-
-# 获取子目录中CMakeLists.txt所在的目录列表，用于排除已被处理的源文件
-set(SUBDIR_LIST "")
-foreach(cmake_file ${SUB_CMAKELISTS})
-  get_filename_component(subdir_path ${cmake_file} DIRECTORY)
-  list(APPEND SUBDIR_LIST ${subdir_path})
-endforeach()
-
-# 过滤出不在子目录中的源文件
-set(ROOT_SOURCES "")
-foreach(source_file ${ALL_SOURCES})
-  set(in_subdir FALSE)
-  foreach(subdir ${SUBDIR_LIST})
-    string(FIND ${source_file} ${subdir} subdir_pos)
-    if(NOT ${subdir_pos} EQUAL -1)
-      set(in_subdir TRUE)
-      break()
-    endif()
-  endforeach()
-  
-  if(NOT in_subdir)
-    list(APPEND ROOT_SOURCES ${source_file})
-  endif()
-endforeach()
-
-# 只有当存在未被子目录处理的源文件时才创建主可执行文件
-if(ROOT_SOURCES)
-  # 创建可执行文件
-  add_executable(ceph ${ROOT_SOURCES})
-
-  # 链接库
-  target_link_libraries(ceph 
-    PRIVATE Threads::Threads 
-    OpenSSL::SSL 
-    OpenSSL::Crypto 
-    ZLIB::ZLIB)
-
-  # 如果在Linux上，添加相应的定义
-  if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-    target_compile_definitions(ceph PRIVATE __linux__)
-  endif()
+# 查找fmt库（尝试系统安装，如果找不到则构建）
+find_package(fmt QUIET)
+if(NOT fmt_FOUND)
+    message(STATUS "fmt not found in system, will use internal implementation")
+    # 如果需要，可以在这里添加从third_party构建fmt的逻辑
+    # 或者使用项目中已有的实现
 endif()
+
+# 添加子模块
+add_subdirectory(src)

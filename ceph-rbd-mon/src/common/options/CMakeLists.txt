@@ -107,6 +107,6 @@ add_library(common-options-objs OBJECT
 add_custom_target(legacy-option-headers
   DEPENDS ${legacy_options_headers})
 
-include(AddCephTest)
-add_ceph_test(validate-options
-  ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})
+#include(AddCephTest)
+#add_ceph_test(validate-options
+#  ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})

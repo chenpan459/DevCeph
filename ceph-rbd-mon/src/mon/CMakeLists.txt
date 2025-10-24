@@ -40,6 +40,9 @@ add_library(mon STATIC
 target_link_libraries(mon
   kv
   heap_profiler
+  ${Boost_LIBRARIES}
+  ${OPENSSL_LIBRARIES}
+  Threads::Threads
   ${FMT_LIB})
 if(WITH_JAEGER)
   target_link_libraries(mon jaeger_base)

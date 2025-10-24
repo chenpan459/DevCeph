@@ -334,7 +334,9 @@ target_link_libraries(librbd PRIVATE
   libneorados
   librados
   ceph-common
-  pthread
+  ${Boost_LIBRARIES}
+  ${OPENSSL_LIBRARIES}
+  Threads::Threads
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 if(HAVE_UDEV)

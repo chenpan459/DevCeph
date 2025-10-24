@@ -45,8 +45,13 @@ if(HAVE_RDMA)
 endif()
 
 add_library(common-msg-objs OBJECT ${msg_srcs})
+#target_compile_definitions(common-msg-objs PRIVATE
+#  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+
+# 最小化版本，不依赖空 TARGET_PROPERTY
 target_compile_definitions(common-msg-objs PRIVATE
-  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+  "FMT_HEADER_ONLY")  # 如果 fmt 是 header-only，可加此宏
+
 target_include_directories(common-msg-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 
 if(WITH_DPDK)

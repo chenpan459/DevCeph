@@ -401,21 +401,21 @@ main() {
     build_project
     
     # 编译示例程序
-    if [ "$EXAMPLE" = true ]; then
-        build_example
-    fi
+    #if [ "$EXAMPLE" = true ]; then
+    #    build_example
+    #fi
     
     # 安装
-    if [ "$INSTALL" = true ]; then
-        install_project
-    fi
+    #if [ "$INSTALL" = true ]; then
+    #    install_project
+    #fi
     
     print_success "构建完成！"
     
-    if [ "$EXAMPLE" = true ]; then
-        print_info "运行示例程序:"
-        print_info "  cd build && ./ceph-rbd-mon-example -h"
-    fi
+    #if [ "$EXAMPLE" = true ]; then
+    #    print_info "运行示例程序:"
+    #    print_info "  cd build && ./ceph-rbd-mon-example -h"
+    #fi
 }
 
 # 运行主流程

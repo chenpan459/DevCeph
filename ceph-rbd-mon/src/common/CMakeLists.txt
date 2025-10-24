@@ -1,3 +1,4 @@
+
 add_library(common_buffer_obj OBJECT
   buffer.cc)
 
@@ -188,12 +189,23 @@ add_library(common-common-objs OBJECT
 # compiling (e.g. targeting Windows).
 target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 # for options.cc
+#target_compile_definitions(common-common-objs PRIVATE
+#  "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
+#  "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
+#  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
+#  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+#add_dependencies(common-common-objs legacy-option-headers)
+
+# 手动定义必要宏，不依赖 INTERFACE target
 target_compile_definitions(common-common-objs PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
-  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
+  "FMT_HEADER_ONLY")   # 如果使用 fmt header-only 模式，可自定义宏
+
+# 保留依赖关系
 add_dependencies(common-common-objs legacy-option-headers)
+
 
 set(common_mountcephfs_srcs
   armor.c
@@ -245,4 +257,14 @@ if(HAVE_KEYUTILS)
   set(parse_secret_srcs
     secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_srcs})
+endif()
+
+# 链接Boost库
+if(Boost_FOUND)
+  # 为需要Boost的组件添加链接
+  target_link_libraries(common-common-objs
+    ${Boost_LIBRARIES}
+    OpenSSL::SSL
+    OpenSSL::Crypto
+    Threads::Threads)
 endif()
