@@ -4,12 +4,10 @@ set(libradosstriper_srcs
   MultiAioCompletionImpl.cc)
 add_library(radosstriper ${CEPH_SHARED}
   ${libradosstriper_srcs})
-
-# 包含路径已在主CMakeLists.txt中全局设置
 target_link_libraries(radosstriper
   PRIVATE
     librados
-    librados_impl
+    librados_impl cls_lock_client osdc ceph-common
     pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 set_target_properties(radosstriper PROPERTIES
   OUPUT_NAME radosstriper

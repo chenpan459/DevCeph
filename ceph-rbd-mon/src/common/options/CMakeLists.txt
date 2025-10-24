@@ -107,18 +107,6 @@ add_library(common-options-objs OBJECT
 add_custom_target(legacy-option-headers
   DEPENDS ${legacy_options_headers})
 
-# 注释掉Ceph特定的测试，因为我们在独立项目中没有这些函数
-# include(AddCephTest)
-# add_ceph_test(validate-options
-#   ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})
-
-# 如果Python3可用，我们可以手动运行验证
-if(Python3_EXECUTABLE)
-  add_custom_target(validate-options
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls}
-    DEPENDS ${options_yamls}
-    COMMENT "Validating options configuration"
-    VERBATIM)
-else()
-  message(STATUS "Python3 not found, skipping options validation")
-endif()
+include(AddCephTest)
+add_ceph_test(validate-options
+  ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/validate-options.py ${options_yamls})

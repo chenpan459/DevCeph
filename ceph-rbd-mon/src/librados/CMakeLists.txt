@@ -5,13 +5,10 @@ add_library(librados_impl STATIC
   librados_util.cc
   librados_tp.cc)
 
-# 包含路径已在主CMakeLists.txt中全局设置
-
 # C/C++ API
 add_library(librados ${CEPH_SHARED}
   librados_c.cc
-  librados_cxx.cc
-  $<TARGET_OBJECTS:common_buffer_obj>)
+  librados_cxx.cc)
 if(ENABLE_SHARED)
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados
@@ -32,10 +29,8 @@ if(ENABLE_SHARED)
   endif()
 endif()
 target_link_libraries(librados PRIVATE
-  librados_impl
+  librados_impl osdc ceph-common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS} ${GSSAPI_LIBRARIES})
-
-# 包含路径已在主CMakeLists.txt中全局设置
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 if(WITH_LTTNG)

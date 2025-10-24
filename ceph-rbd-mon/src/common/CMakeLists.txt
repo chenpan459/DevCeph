@@ -191,13 +191,8 @@ target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
 target_compile_definitions(common-common-objs PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
-  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
-
-# 只有在fmt库存在时才添加其编译定义
-if(fmt_FOUND AND TARGET fmt::fmt)
-  target_compile_definitions(common-common-objs PRIVATE
-    $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
-endif()
+  "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
+  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 add_dependencies(common-common-objs legacy-option-headers)
 
 set(common_mountcephfs_srcs

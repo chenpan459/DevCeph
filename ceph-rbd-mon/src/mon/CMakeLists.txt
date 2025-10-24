@@ -1,5 +1,7 @@
-# 只包含存在的源文件
 set(lib_mon_srcs
+  ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxKeyServer.cc
+  ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxServiceHandler.cc
+  ${CMAKE_SOURCE_DIR}/src/auth/AuthServiceHandler.cc
   Paxos.cc
   PaxosService.cc
   OSDMonitor.cc
@@ -18,24 +20,27 @@ set(lib_mon_srcs
   ElectionLogic.cc
   ConnectionTracker.cc
   HealthMonitor.cc
-  KVMonitor.cc)
+  KVMonitor.cc
+  ../mds/MDSAuthCaps.cc
+  ../mgr/mgr_commands.cc
+  ../osd/OSDCap.cc
+  ../mgr/MgrCap.cc)
 
-# mgr_cap_obj目标不存在，已移除引用
+if(TARGET mgr_cap_obj)
+  list(APPEND lib_mon_srcs $<TARGET_OBJECTS:mgr_cap_obj>)
+endif()
 
-# GSSAPI相关文件不存在，已移除引用
-# if(HAVE_GSSAPI)
-#   list(APPEND lib_mon_srcs
-#     ${CMAKE_SOURCE_DIR}/src/auth/krb/KrbServiceHandler.cpp)
-# endif()
+if(HAVE_GSSAPI)
+  list(APPEND lib_mon_srcs
+    ${CMAKE_SOURCE_DIR}/src/auth/krb/KrbServiceHandler.cpp)
+endif()
 
 add_library(mon STATIC
   ${lib_mon_srcs})
-
-# 包含路径已在主CMakeLists.txt中全局设置
-# 只有在fmt库存在时才链接
-if(fmt_FOUND AND TARGET fmt::fmt)
-  target_link_libraries(mon fmt::fmt)
-endif()
+target_link_libraries(mon
+  kv
+  heap_profiler
+  ${FMT_LIB})
 if(WITH_JAEGER)
   target_link_libraries(mon jaeger_base)
 endif()
